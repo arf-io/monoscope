@@ -1,0 +1,33 @@
+{
+  "name": "ikegami-htm1990r-2003",
+  "description": "Ikegami HTM-1990R (2003, ~$12,000): Sony's only real rival at the end. Fine-pitch DOT mask HD master \u2014 no damper wires at all, very fine grain, auto-calibrated.",
+  "meta": {
+    "year": 2003,
+    "type": "Broadcast/pro",
+    "manufacturer": "Ikegami",
+    "price_usd": 12000,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "delta",
+    "geom_mode": "flat",
+    "curve_radius": 8.0,
+    "corner_radius": 0.008,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 950.0,
+    "era": "modern90s",
+    "hum_amp": 0.0,
+    "noise": 0.0,
+    "misconvergence": 0.2,
+    "hv_breathing": 0.0,
+    "halation": 0.036,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.12,
+    "mask_triads": 780,
+    "glass_tint": 0.5,
+    "bezel": 0.15,
+    "flicker": 0.0
+  }
+}

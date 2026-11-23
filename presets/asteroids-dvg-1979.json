@@ -1,0 +1,43 @@
+{
+  "name": "asteroids-dvg-1979",
+  "description": "Asteroids (1979, Atari): the definitive black-and-white arcade vector game on an Electrohome G05 / Wells-Gardner 19V2000 tube \u2014 a 19-inch 19VARP4 (P4 white, not green), driven by the Atari DVG display-list processor at 61.5 Hz (which drops under a ~35-object load). Max-brightness shot dots against dim rocks, strong dwell dots at stroke ends, ~2x brightness non-uniformity, and the notorious score-digit burn-in. Outline extraction stands in for the DVG's 16 intensity levels.",
+  "meta": {
+    "year": 1979,
+    "type": "Arcade",
+    "manufacturer": "Atari",
+    "price_usd": null,
+    "resolution": 1024
+  },
+  "params": {
+    "vector_mode": "outline",
+    "phosphor": "p4",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 2.6,
+    "pincushion": 0.03,
+    "corner_radius": 0.04,
+    "scan_lines": 1024,
+    "interlace": false,
+    "vector_trace": 1.0,
+    "vector_beam_core": 0.7,
+    "vector_beam_halo": 3.0,
+    "vector_dot_gain": 2.2,
+    "vector_edge_threshold": 0.12,
+    "vector_flicker": 0.12,
+    "vector_grain": 0.04,
+    "focus": 0.95,
+    "scan_min_width": 0.26,
+    "persistence": 1.0,
+    "h_bandwidth": 1100.0,
+    "era": "tube60s",
+    "warmup_time_scale": 0.2,
+    "glass_tint": 0.42,
+    "halation": 0.1,
+    "diffusion": 0.05,
+    "bezel": 0.4,
+    "noise": 0.005,
+    "misconvergence": 0.0,
+    "burnin_rate": 0.5,
+    "burnin_vintage": 0.28
+  }
+}

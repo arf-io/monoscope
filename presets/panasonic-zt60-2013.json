@@ -1,0 +1,39 @@
+{
+  "name": "panasonic-zt60-2013",
+  "description": "Panasonic ZT60 (2013, $3,500): plasma's swan song \u2014 Studio Master panel, near-Kuro blacks, faint fast dither, barely-there trails. The last and best of the breed; the factories closed the next year.",
+  "meta": {
+    "year": 2013,
+    "type": "Plasma panels",
+    "manufacturer": "Panasonic",
+    "price_usd": 3500,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "pdp",
+    "mask_type": "grille",
+    "mask_triads": 960,
+    "mask_strength": 0.42,
+    "mask_fade": 0.5,
+    "geom_mode": "flat",
+    "corner_radius": 0.003,
+    "era": "modern90s",
+    "persistence": 0.4,
+    "pdp_dither": 0.25,
+    "pdp_contour": 0.15,
+    "pdp_black_floor": 0.0006,
+    "flicker": 0.005,
+    "abl": 0.55,
+    "glass_tint": 0.6,
+    "bezel": 0.12,
+    "burnin_rate": 0.08,
+    "burnin_visibility": 0.3,
+    "h_bandwidth": 1200.0,
+    "halation": 0.0,
+    "diffusion": 0.0,
+    "noise": 0.0,
+    "hum_amp": 0.0,
+    "emi_wobble": 0.0,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.0
+  }
+}

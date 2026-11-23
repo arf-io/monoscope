@@ -1,0 +1,32 @@
+{
+  "name": "toshiba-blackstripe-1976",
+  "description": "Toshiba Blackstripe (1976, ~$380): the slot-mask answer to Trinitron for people who wouldn't pay Sony prices. Brick-wall texture up close, slightly warm, click-stop tuner static.",
+  "meta": {
+    "year": 1976,
+    "type": "Consumer TV",
+    "manufacturer": "Toshiba",
+    "price_usd": 380,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "slot",
+    "geom_mode": "spherical",
+    "curve_radius": 2.0,
+    "corner_radius": 0.05,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 250.0,
+    "era": "ss80s",
+    "hum_amp": 0.03,
+    "noise": 0.03,
+    "misconvergence": 0.8,
+    "hv_breathing": 0.5,
+    "halation": 0.072,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.09,
+    "mask_triads": 370,
+    "glass_tint": 0.7,
+    "bezel": 0.5
+  }
+}

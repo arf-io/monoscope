@@ -1,0 +1,35 @@
+{
+  "name": "ibm-5153-cga-1983",
+  "description": "IBM 5153 (1983, $680): the CGA look \u2014 fat 200-line raster, saturated primaries, and the hardware-tamed dark-yellow-that-became-brown. Convergence 'good enough for 200 lines'.",
+  "meta": {
+    "year": 1983,
+    "type": "PC monitors",
+    "manufacturer": "IBM",
+    "price_usd": 680,
+    "resolution": 200
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "slot",
+    "geom_mode": "spherical",
+    "curve_radius": 2.2,
+    "corner_radius": 0.04,
+    "scan_lines": 200,
+    "interlace": false,
+    "h_bandwidth": 370.0,
+    "era": "ss80s",
+    "hum_amp": 0.01,
+    "noise": 0.005,
+    "misconvergence": 0.8,
+    "hv_breathing": 0.3,
+    "halation": 0.054,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.15,
+    "mask_triads": 460,
+    "glass_tint": 0.65,
+    "bezel": 0.4
+  },
+  "terminal": {
+    "font-size": 27
+  }
+}

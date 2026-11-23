@@ -1,0 +1,35 @@
+{
+  "name": "trs80-model1-1977",
+  "description": "Radio Shack TRS-80 Model I monitor (1977, ~$199): literally an RCA portable TV with the tuner pulled, painted Mercedes Silver. White text in a halation glow; the raster breathes as the screen fills.",
+  "meta": {
+    "year": 1977,
+    "type": "Terminals (mono)",
+    "manufacturer": "Radio Shack",
+    "price_usd": 199,
+    "resolution": 240
+  },
+  "params": {
+    "phosphor": "p4",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 1.9,
+    "corner_radius": 0.05,
+    "scan_lines": 240,
+    "interlace": false,
+    "h_bandwidth": 350.0,
+    "era": "ss80s",
+    "hum_amp": 0.05,
+    "noise": 0.02,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.6,
+    "halation": 0.126,
+    "burnin_vintage": 0.08,
+    "burnin_rate": 0.18,
+    "glass_tint": 0.72,
+    "bezel": 0.55,
+    "brightness": 0.03
+  },
+  "terminal": {
+    "font-size": 27
+  }
+}

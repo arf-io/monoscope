@@ -1,0 +1,33 @@
+{
+  "name": "rca-tm21-broadcast-1965",
+  "description": "RCA TM-21 studio monitor (1960s, ~$2,000 = half a year's rent): the calibrated reference the CT-100 wished it was. Dim but honest D65, hand-converged weekly, direct video (no snow).",
+  "meta": {
+    "year": 1965,
+    "type": "Broadcast/pro",
+    "manufacturer": "RCA",
+    "price_usd": 2000,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "delta",
+    "geom_mode": "spherical",
+    "curve_radius": 1.7,
+    "corner_radius": 0.06,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 350.0,
+    "era": "tube60s",
+    "hum_amp": 0.03,
+    "noise": 0.01,
+    "misconvergence": 1.2,
+    "hv_breathing": 0.2,
+    "halation": 0.072,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.12,
+    "mask_triads": 400,
+    "contrast": 0.9,
+    "glass_tint": 0.6,
+    "bezel": 0.3
+  }
+}

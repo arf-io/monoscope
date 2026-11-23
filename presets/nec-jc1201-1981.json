@@ -1,0 +1,32 @@
+{
+  "name": "nec-jc1201-1981",
+  "description": "NEC JC-1201 (1981, ~$399): early composite color. Rainbow dot-crawl on every text edge \u2014 the NTSC artifact colors Apple II software exploited on purpose.",
+  "meta": {
+    "year": 1981,
+    "type": "PC monitors",
+    "manufacturer": "NEC",
+    "price_usd": 399,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "slot",
+    "geom_mode": "spherical",
+    "curve_radius": 2.0,
+    "corner_radius": 0.05,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 260.0,
+    "era": "ss80s",
+    "hum_amp": 0.02,
+    "noise": 0.02,
+    "misconvergence": 0.8,
+    "hv_breathing": 0.3,
+    "halation": 0.054,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.12,
+    "mask_triads": 350,
+    "glass_tint": 0.68,
+    "bezel": 0.45
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "name": "pioneer-kuro-2008",
+  "description": "Pioneer Kuro PRO-111FD (2008, $5,000): the black-level king (0.001 cd/m2). Fine cell grid behind the bonded filter, mild green lag, tamed contouring, dither only in the last shadows. The panel LCD spent a decade chasing.",
+  "meta": {
+    "year": 2008,
+    "type": "Plasma panels",
+    "manufacturer": "Pioneer",
+    "price_usd": 5000,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "pdp",
+    "mask_type": "grille",
+    "mask_triads": 960,
+    "mask_strength": 0.45,
+    "mask_fade": 0.45,
+    "geom_mode": "flat",
+    "corner_radius": 0.003,
+    "era": "modern90s",
+    "persistence": 0.6,
+    "pdp_dither": 0.3,
+    "pdp_contour": 0.25,
+    "pdp_black_floor": 0.0006,
+    "flicker": 0.008,
+    "abl": 0.6,
+    "glass_tint": 0.6,
+    "bezel": 0.15,
+    "burnin_rate": 0.15,
+    "burnin_visibility": 0.4,
+    "h_bandwidth": 1200.0,
+    "halation": 0.0,
+    "diffusion": 0.0,
+    "noise": 0.0,
+    "hum_amp": 0.0,
+    "emi_wobble": 0.0,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.0
+  }
+}

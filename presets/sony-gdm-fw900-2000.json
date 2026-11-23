@@ -1,0 +1,34 @@
+{
+  "name": "sony-gdm-fw900-2000",
+  "description": "Sony GDM-FW900 (2000, $1,999): the final form \u2014 24-inch flat widescreen FD Trinitron, per-pixel sharp, two faint damper wires, 42kg of desk commitment. The last word before LCD won.",
+  "meta": {
+    "year": 2000,
+    "type": "PC monitors",
+    "manufacturer": "Sony",
+    "price_usd": 1999,
+    "resolution": 1024
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "grille",
+    "geom_mode": "flat",
+    "curve_radius": 8.0,
+    "corner_radius": 0.008,
+    "scan_lines": 1024,
+    "interlace": false,
+    "h_bandwidth": 1100.0,
+    "era": "modern90s",
+    "hum_amp": 0.0,
+    "noise": 0.0,
+    "misconvergence": 0.4,
+    "hv_breathing": 0.1,
+    "halation": 0.018,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.09,
+    "mask_triads": 820,
+    "damper_wires": "two",
+    "glass_tint": 0.6,
+    "bezel": 0.12,
+    "flicker": 0.0
+  }
+}

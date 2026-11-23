@@ -1,0 +1,34 @@
+{
+  "name": "macintosh-128k-1984",
+  "description": "Macintosh 128K built-in 9-inch (1984, machine $2,495): the first mainstream 'paper' screen \u2014 dense black-on-white bitmap at 72ppi. Menu-bar burn-in was its retirement tattoo.",
+  "meta": {
+    "year": 1984,
+    "type": "PC monitors",
+    "manufacturer": "Apple",
+    "price_usd": 2495,
+    "resolution": 342
+  },
+  "params": {
+    "phosphor": "paperwhite",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 2.6,
+    "corner_radius": 0.03,
+    "scan_lines": 342,
+    "interlace": false,
+    "h_bandwidth": 512.0,
+    "era": "ss80s",
+    "hum_amp": 0.01,
+    "noise": 0.0,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.2,
+    "halation": 0.054,
+    "burnin_vintage": 0.16,
+    "burnin_rate": 0.21,
+    "glass_tint": 0.62,
+    "bezel": 0.35
+  },
+  "terminal": {
+    "font-size": 23
+  }
+}

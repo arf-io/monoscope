@@ -1,0 +1,46 @@
+{
+  "name": "vectrex-1982",
+  "description": "Vectrex (1982, GCE/Milton Bradley, $199 launch): the only home vector console. A 9-inch Samsung 240RB40 black-and-white TV tube (white P4-family \u2014 it glows blue-white, not P31 green) steered directly in XY at a BIOS-locked 50 Hz, so the image wobbles on 60 Hz mains. The small low-HV tube (5.8 kV) gives a fat relative spot, heavy pincushion, and dot-dwell brightness at stroke ends; per-game plastic overlays tinted the mono beam. Outline extraction of the terminal frame stands in for the drawn display list.",
+  "meta": {
+    "year": 1982,
+    "type": "Arcade",
+    "manufacturer": "GCE/Milton Bradley",
+    "price_usd": 199,
+    "resolution": 330
+  },
+  "params": {
+    "vector_mode": "outline",
+    "phosphor": "p4",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 2.2,
+    "pincushion": 0.05,
+    "corner_radius": 0.05,
+    "scan_lines": 330,
+    "interlace": false,
+    "vector_trace": 1.0,
+    "vector_beam_core": 0.95,
+    "vector_beam_halo": 3.6,
+    "vector_dot_gain": 1.9,
+    "vector_edge_threshold": 0.12,
+    "vector_flicker": 0.18,
+    "vector_grain": 0.05,
+    "focus": 1.05,
+    "scan_min_width": 0.3,
+    "persistence": 0.9,
+    "h_bandwidth": 900.0,
+    "era": "tube60s",
+    "warmup_time_scale": 0.2,
+    "glass_tint": 0.42,
+    "halation": 0.11,
+    "diffusion": 0.06,
+    "bezel": 0.44,
+    "noise": 0.006,
+    "misconvergence": 0.0,
+    "burnin_rate": 0.25,
+    "burnin_vintage": 0.12
+  },
+  "terminal": {
+    "font-size": 20
+  }
+}

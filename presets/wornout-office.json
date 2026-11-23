@@ -1,0 +1,42 @@
+{
+  "name": "wornout-office",
+  "description": "The abused office terminal: pre-aged burn-in ghosts, occasional slow V-roll, retrace lines from a cooked G2, EMI, misconverged",
+  "meta": {
+    "year": null,
+    "type": "Character",
+    "manufacturer": "ghostcrtty",
+    "price_usd": null,
+    "resolution": 480
+  },
+  "params": {
+    "mask_type": "slot",
+    "mask_triads": 400,
+    "mask_strength": 0.5,
+    "mask_fade": 0.35,
+    "geom_mode": "spherical",
+    "curve_radius": 3.0,
+    "corner_radius": 0.045,
+    "phosphor": "p22",
+    "scan_lines": 480,
+    "scan_min_width": 0.42,
+    "scan_bloom": 0.7,
+    "h_bandwidth": 350.0,
+    "misconvergence": 1.5,
+    "era": "ss80s",
+    "burnin_vintage": 0.65,
+    "burnin_rate": 0.3,
+    "burnin_visibility": 0.7,
+    "v_hold": 0.35,
+    "g2_screen": 0.68,
+    "hum_amp": 0.035,
+    "emi_wobble": 0.45,
+    "hv_breathing": 0.7,
+    "glass_tint": 0.6,
+    "halation": 0.08,
+    "diffusion": 0.1,
+    "noise": 0.03,
+    "flicker": 0.015,
+    "bezel": 0.5,
+    "brightness": 0.04
+  }
+}

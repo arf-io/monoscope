@@ -1,0 +1,32 @@
+{
+  "name": "ibm-8513-vga-1987",
+  "description": "IBM 8513 (1987, $685): the office VGA baseline. Fine 0.28mm dot grain, cool businesslike white, mild moire on dithers, dies outside VGA modes.",
+  "meta": {
+    "year": 1987,
+    "type": "PC monitors",
+    "manufacturer": "IBM",
+    "price_usd": 685,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "delta",
+    "geom_mode": "spherical",
+    "curve_radius": 2.6,
+    "corner_radius": 0.03,
+    "scan_lines": 480,
+    "interlace": false,
+    "h_bandwidth": 640.0,
+    "era": "modern90s",
+    "hum_amp": 0.01,
+    "noise": 0.0,
+    "misconvergence": 0.6,
+    "hv_breathing": 0.2,
+    "halation": 0.036,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.15,
+    "mask_triads": 620,
+    "glass_tint": 0.6,
+    "bezel": 0.3
+  }
+}

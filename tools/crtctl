@@ -1,0 +1,1844 @@
+#!/usr/bin/env python3
+# crtctl — hidden analog control surface for the Ghostty CRT shader simulation.
+#
+# Usage:
+#   crtctl                          launch MONOSCOPE, the control surface (default on a tty)
+#   crtctl panel [--motion M] [--no-splash] [--no-mouse] [--fps N] [--flat-field]
+#   crtctl get <param>              print one value
+#   crtctl set <param> <value>     set (validate+quantize; values outside the
+#                                   nominal min..max are accepted with a
+#                                   stderr warning naming the consequence;
+#                                   only a schema hard_min/hard_max refuses),
+#                                   regenerate, reload
+#   crtctl list [group]             list values + ranges, grouped ("⚠ outside
+#                                   nominal" marks values past the band)
+#   crtctl apply                    regenerate shaders from current state and reload
+#   crtctl preset <name>            apply preset (defaults + overrides), regen, reload
+#   crtctl preset --save <name> --description "..."    save current non-defaults
+#   crtctl presets                  list presets with descriptions (active marked *)
+#   crtctl save <name>              save a full-state profile snapshot (alias: --save)
+#   crtctl load <name>              restore a profile, regen, reload (alias: --load)
+#   crtctl profiles                 list saved profiles with timestamps
+#   crtctl terminal [key [value]]   terminal overrides: font-size (6..40) or
+#                                   font-family; value 'default' clears one;
+#                                   no args shows the current overrides
+#   crtctl power [on|off|toggle]    tube power (bumps power_nonce), regen, reload
+#   crtctl degauss                  fire the degauss coil (bumps degauss_nonce)
+#   crtctl erase                    fire the DVST page erase (bumps erase_nonce)
+#   crtctl targets                  list reachable ghostty instances
+#   crtctl status                   paths, active preset, dest reachability, last gen
+#
+# Options:
+#   --dest NAME    D-Bus destination for reload (default io.arf.ghostty_phosphor; env GHOSTTY_CRT_DEST overrides)
+#   --save NAME    alias for 'crtctl save NAME'
+#   --load NAME    alias for 'crtctl load NAME'
+#
+# Reload transport: on Linux the reload is a D-Bus org.gtk.Actions call to
+# --dest; on macOS it is `pkill -USR2 -f Ghostty` (Ghostty's AppKit runtime
+# installs a SIGUSR2 -> reload_config handler at launch). Setting
+# GHOSTTY_CRT_RELOAD_CMD (a shell-style command line) replaces the transport
+# on any platform, e.g. GHOSTTY_CRT_RELOAD_CMD='pkill -USR2 -x ghostty'.
+#
+# Files (base dir = $GHOSTTY_CRT_HOME if set, else $XDG_CONFIG_HOME/ghostty
+# if set, else ~/.config/ghostty; on macOS the fallback is
+# ~/Library/Application Support/com.mitchellh.ghostty — Ghostty reads config
+# from both places there, see src/config/Config.zig loadDefaultFiles):
+#   crt/params.json              parameter definitions — the single source of truth
+#   crt/state.json               current values (non-default) + active preset name
+#                                + terminal overrides
+#   crt/templates/*.glsl.tmpl    shader templates containing a //@CRT_PARAMS@ line
+#   crt/presets/*.json           presets: {"name","description","params":{...}}
+#                                (optional "terminal":{...} — replaces on apply;
+#                                optional "meta":{year,type,manufacturer,
+#                                price_usd,resolution} — drives the TUI preset
+#                                picker's details pane and sort modes)
+#   crt/profiles/*.json          full-state profiles: {"name","saved","params",
+#                                "active_preset","terminal"}
+#   crt-overrides.conf           terminal overrides (one 'key = value' per line),
+#                                passed to the fork via --config-file at launch
+#   shaders/                     generated GLSL output (one file per template)
+#
+# The panel: `crtctl` (no verb, on a tty) or `crtctl panel` launches MONOSCOPE,
+# the demoscene control surface in tools/monoscope/ (stdlib only, its own
+# truecolor renderer — no curses, no palette hacks, no optional skins). The
+# CLI verbs below never import it; the panel is `crtctl`'s interactive form.
+# Options: --motion full|reduced|off, --no-splash, --no-mouse, --fps N,
+# --flat-field (see tools/monoscope/README.md).
+#
+# Every parameter renders dynamically from params.json; nothing is hardcoded here.
+# Python 3 stdlib only. Full manual: tools/README.md next to this script.
+
+import argparse
+import json
+import math
+import os
+import re
+import shlex
+import subprocess
+import sys
+import tempfile
+import time
+
+MARKER = "//@CRT_PARAMS@"
+# Default D-Bus target. The phosphor-feedback fork runs under its own
+# application ID (io.arf.ghostty_phosphor, see ghostty-phosphor-crt)
+# so it can coexist with stock Ghostty; GHOSTTY_CRT_DEST overrides.
+DEFAULT_DEST = os.environ.get("GHOSTTY_CRT_DEST", "io.arf.ghostty_phosphor")
+# Platform switch for path/transport defaults. Read at call time so the
+# tests can monkeypatch crtctl._PLATFORM; nothing else differs per OS.
+_PLATFORM = sys.platform
+# macOS reload transport: Ghostty's AppKit runtime installs a SIGUSR2 ->
+# reload_config handler at launch (upstream v1.3.1,
+# macos/Sources/App/macOS/AppDelegate.swift setupSignals), so a signal
+# replaces the D-Bus call. pkill -f matches the full command line, which
+# for the app bundle contains ".../Ghostty.app/Contents/MacOS/ghostty".
+# Note: this signals EVERY matching process (a stock Ghostty.app too —
+# for it that is just a config reload). GHOSTTY_CRT_RELOAD_CMD narrows it.
+DARWIN_RELOAD_ARGV = ("pkill", "-USR2", "-f", "Ghostty")
+DARWIN_TARGETS_ARGV = ("pgrep", "-fl", "Ghostty")
+# Escape hatch: a shell-style command line that replaces the reload
+# transport wholesale, on any platform.
+RELOAD_CMD_ENV = "GHOSTTY_CRT_RELOAD_CMD"
+GUARD_DEFINE = "#define CRT_PARAMS_INJECTED 1"
+TEMPLATE_SUFFIX = ".glsl.tmpl"
+OVERRIDES_NAME = "crt-overrides.conf"
+# Terminal-override whitelist: the only keys crtctl will pass to Ghostty
+# via crt-overrides.conf (--config-file). Everything else is rejected.
+TERMINAL_KEYS = ("font-family", "font-size")
+FONT_SIZE_MIN, FONT_SIZE_MAX = 6.0, 40.0
+
+# GLSL literal limits. define_value emits ints as bare literals and floats
+# with %.6g. glslang silently wraps an int literal past 32 signed bits
+# (3000000000 compiles to -1294967296), rejects one past 32 unsigned bits
+# ("numeric literal too big"), and folds a float literal past 3.4e38 to
+# +inf — all three break the generated shader. normalize_value refuses
+# such values on every path (CLI, state.json, presets, profiles).
+GLSL_INT_MIN, GLSL_INT_MAX = -2147483648, 2147483647
+GLSL_FLOAT_MAX = 3.4028234663852886e38
+
+# `crtctl list` / `crtctl set`: marker for a value outside its nominal
+# [min, max] band (see normalize_value: nominal is a band, not a wall).
+OUTSIDE_NOMINAL_UTF = " ⚠ outside nominal"
+OUTSIDE_NOMINAL_ASCII = " ! outside nominal"
+
+# Patchable in tests to simulate atomic-rename failure.
+_REPLACE = os.replace
+
+# swap-style: what a preset switch does with the previous tube's glow.
+SWAP_STYLES = ("carry", "degauss", "fresh")
+
+# PINASH_PATH / SCANHOUND_PATH values that explicitly disable the style layer.
+
+# Preset-picker sort modes, cycled with 's' inside the picker. The order
+# here is the cycle order; the active mode shows in the picker title.
+SORT_MODES = ("name", "year", "type", "manufacturer", "price", "resolution")
+
+# Preset families, mirroring the preset-bank table in ../README.md. Used
+# once by derive_preset_meta to stamp meta.type into each curated preset;
+# the picker itself reads meta from the preset JSON, so user presets
+# without an entry here (or without meta at all) still work.
+PRESET_FAMILIES = {}
+for _family, _members in (
+    ("Daily drivers", "smartdark-creme paperwhite terminal-green-p31 "
+                      "lowend-igpu"),
+    ("Broadcast/pro", "trinitron-pvm sony-pvm1954q-1990 sony-bvm-d24-2000 "
+                      "conrac-reference-1978 ikegami-htm1990r-2003 "
+                      "rca-tm21-broadcast-1965"),
+    ("Consumer TV", "zenith-porthole-1949 rca-ct100-1954 sony-tv8-301w-1960 "
+                    "sony-kv1210-trinitron-1969 zenith-chromacolor-1971 "
+                    "rca-xl100-1971 sony-kv1926-1975 toshiba-blackstripe-1976 "
+                    "sanyo-21t50-1978 zenith-system3-1978 hitachi-19in-1980 "
+                    "consumer-slot-tv bw-tv-p4"),
+    ("PC monitors", "ibm-5153-cga-1983 ibm-8513-vga-1987 nec-jc1201-1981 "
+                    "nec-multisync-1986 commodore-1702-1983 "
+                    "commodore-1084-1988 applecolor-rgb-1987 "
+                    "macintosh-128k-1984 tandy-cm5-1987 tandy-cm11-1988 "
+                    "sony-gdm-fw900-2000"),
+    ("Terminals (mono)", "ibm-5151-mda-1981 apple-monitor-iii-1980 "
+                         "amdek-video300-1982 amdek-video300a-1983 "
+                         "tandy-vm5-green-1988 trs80-model1-1977 vt-amber "
+                         "ibm5151-green"),
+    ("Storage tubes", "tek4010-storage tek4014-storage tek4054-opt31"),
+    ("Arcade", "delta-arcade wells-gardner-k4600-1979 electrohome-g07-1981 "
+               "vectrex-1982 asteroids-dvg-1979 lunar-lander-1979 "
+               "tempest-wg6100-1981 starwars-amplifone-1983"),
+    ("Instruments", "tektronix-465-scope vector-p31-scope mil-ppi-radar-p7 "
+                    "radar-p7"),
+    ("Plasma panels", "panasonic-edtv-2000 pioneer-kuro-2008 "
+                      "panasonic-zt60-2013"),
+    ("Fiction", "what-if-crts-won-2026"),
+    ("Character", "wornout-office"),
+):
+    for _n in _members.split():
+        PRESET_FAMILIES[_n] = _family
+del _family, _members, _n
+
+# Manufacturer-prefixed preset names: prefix -> proper capitalization.
+# Matched against the first hyphen token, then as a bare name prefix
+# (ibm5151-green, applecolor-rgb-1987).
+PRESET_MAKERS = {
+    "sony": "Sony", "rca": "RCA", "zenith": "Zenith", "ibm": "IBM",
+    "apple": "Apple", "nec": "NEC", "tandy": "Tandy",
+    "commodore": "Commodore", "panasonic": "Panasonic", "pioneer": "Pioneer",
+    "toshiba": "Toshiba", "sanyo": "Sanyo", "hitachi": "Hitachi",
+    "amdek": "Amdek", "ikegami": "Ikegami", "conrac": "Conrac",
+    "tektronix": "Tektronix", "wells": "Wells-Gardner",
+    "electrohome": "Electrohome",
+}
+
+# The rest, mapped by hand (archetypes, house presets, renamed brands).
+PRESET_MAKER_SPECIAL = {
+    "smartdark-creme": "ghostcrtty", "paperwhite": "ghostcrtty",
+    "terminal-green-p31": "ghostcrtty", "wornout-office": "ghostcrtty",
+    "lowend-igpu": "ghostcrtty",
+    "mil-ppi-radar-p7": "military surplus", "radar-p7": "military surplus",
+    "bw-tv-p4": "generic", "consumer-slot-tv": "generic",
+    "delta-arcade": "generic",
+    "macintosh-128k-1984": "Apple", "trinitron-pvm": "Sony",
+    "what-if-crts-won-2026": "Sony (fiction)",
+    "trs80-model1-1977": "Radio Shack", "vt-amber": "DEC/Wyse",
+    "tek4010-storage": "Tektronix", "tek4014-storage": "Tektronix",
+    "tek4054-opt31": "Tektronix",
+    "vector-p31-scope": "generic laboratory/vector display",
+    # Vector / XY arcade class (game-named presets; monitor makers vary —
+    # Electrohome/Wells-Gardner/Amplifone — so the game publisher is used).
+    "vectrex-1982": "GCE/Milton Bradley",
+    "asteroids-dvg-1979": "Atari",
+    "lunar-lander-1979": "Atari",
+    "tempest-wg6100-1981": "Atari",
+    "starwars-amplifone-1983": "Atari",
+}
+
+# Headline settings shown in the picker's details pane (in this order).
+DETAIL_KEYS = ("phosphor", "mask_type", "scan_lines", "geom_mode", "era")
+
+
+class CrtError(Exception):
+    """Any crtctl-level failure with a user-facing message."""
+
+
+class ParamError(CrtError):
+    """Invalid parameter name or value."""
+
+
+# --------------------------------------------------------------------------
+# value handling
+# --------------------------------------------------------------------------
+
+def default_base():
+    """Directory holding crt/ + shaders/ + crt-overrides.conf. Resolution
+    mirrors where Ghostty itself looks for config: $GHOSTTY_CRT_HOME wins,
+    then $XDG_CONFIG_HOME/ghostty, then the platform default — on macOS
+    ~/Library/Application Support/com.mitchellh.ghostty (Ghostty loads both
+    the XDG and the App Support config there; src/config/Config.zig
+    loadDefaultFiles), elsewhere ~/.config/ghostty."""
+    env = os.environ.get("GHOSTTY_CRT_HOME")
+    if env:
+        return env
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        return os.path.join(xdg, "ghostty")
+    if _PLATFORM == "darwin":
+        return os.path.join(os.path.expanduser("~"), "Library",
+                            "Application Support", "com.mitchellh.ghostty")
+    return os.path.join(os.path.expanduser("~"), ".config", "ghostty")
+
+
+def parse_bool(raw):
+    if isinstance(raw, bool):
+        return raw
+    if isinstance(raw, (int, float)) and raw in (0, 1):
+        return bool(raw)
+    if isinstance(raw, str):
+        s = raw.strip().lower()
+        if s in ("1", "true", "on", "yes"):
+            return True
+        if s in ("0", "false", "off", "no"):
+            return False
+    raise ParamError("expected a boolean (on/off/true/false/1/0), got %r" % (raw,))
+
+
+def quantize_float(v, spec, soft=False):
+    """Snap v to the step grid anchored at min. soft=False (dial
+    semantics) also clamps to the nominal [min, max]; soft=True keeps the
+    value wherever it lands — the nominal range is a band, not a wall."""
+    lo = spec.get("min")
+    hi = spec.get("max")
+    step = spec.get("step")
+    if not soft:
+        if lo is not None:
+            v = max(v, float(lo))
+        if hi is not None:
+            v = min(v, float(hi))
+    if step:
+        base = float(lo) if lo is not None else 0.0
+        v = base + round((v - base) / float(step)) * float(step)
+        if not soft:
+            if lo is not None:
+                v = max(v, float(lo))
+            if hi is not None:
+                v = min(v, float(hi))
+        v = round(v, 10)  # kill float fuzz from the multiply
+    return float(v)
+
+
+def quantize_int(v, spec, soft=False):
+    """Integer twin of quantize_float: step grid anchored at min; clamps
+    to [min, max] unless soft."""
+    lo = spec.get("min")
+    hi = spec.get("max")
+    step = spec.get("step") or 1
+    if not soft:
+        if lo is not None:
+            v = max(v, int(lo))
+        if hi is not None:
+            v = min(v, int(hi))
+    base = int(lo) if lo is not None else 0
+    v = base + int(round((v - base) / float(step))) * int(step)
+    if not soft:
+        if lo is not None:
+            v = max(v, int(lo))
+        if hi is not None:
+            v = min(v, int(hi))
+    return int(v)
+
+
+def _num_text(x):
+    """Compact human form of a schema number (int stays int; floats %.10g
+    so 0.25, 6500 and 1100000 all read naturally)."""
+    if isinstance(x, bool):
+        return str(x)
+    if isinstance(x, int):
+        return str(x)
+    return "%.10g" % float(x)
+
+
+def hard_bounds(spec):
+    """(hard_min, hard_max) of a spec — None where the schema declares
+    none. A hard bound is a technical limit of the shader or generator
+    (divide-by-zero, half-float texel ceiling, ...), never taste; the
+    schema justifies each one in 'hard_why'."""
+    return spec.get("hard_min"), spec.get("hard_max")
+
+
+def _check_hard(key, spec, v, raw):
+    """Raise ParamError naming the violated hard bound and its hard_why."""
+    lo, hi = hard_bounds(spec)
+    if lo is None and hi is None:
+        return
+    why = spec.get("hard_why") or "technical limit of the shader"
+    shown = raw if isinstance(raw, str) else _num_text(raw)
+    if lo is not None and v < lo:
+        raise ParamError("%s: %s is below the hard minimum %s (%s)"
+                         % (key, shown, _num_text(lo), why))
+    if hi is not None and v > hi:
+        raise ParamError("%s: %s is above the hard maximum %s (%s)"
+                         % (key, shown, _num_text(hi), why))
+
+
+def normalize_value(key, spec, raw, soft=False):
+    """Coerce raw (from CLI/state/preset) to the canonical python value:
+    float, int, bool, or enum member name (str), quantized to `step`
+    (anchored at `min`).
+
+    soft=False: dial semantics — clamp to the nominal [min, max]. This is
+                what a knob does at the end of its travel.
+    soft=True:  the nominal range is a band, not a wall. Values outside
+                it are kept as given (quantized) — a preset carrying 2000
+                scan lines is an experiment, not an error. Only the spec's
+                hard_min/hard_max (where declared) are enforced, by
+                raising ParamError that names the bound and its hard_why.
+
+    On both paths a value that cannot be a GLSL literal of the param's
+    type — an int outside 32 bits, a float past 3.4e38 — is refused:
+    define_value would otherwise emit a define that glslang wraps, folds
+    to inf, or rejects outright."""
+    t = spec.get("type")
+    if t == "float":
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            raise ParamError("%s: expected a number, got %r" % (key, raw))
+        if not math.isfinite(v):
+            raise ParamError("%s: value must be finite" % key)
+        v = quantize_float(v, spec, soft=soft)
+        if abs(v) > GLSL_FLOAT_MAX:
+            raise ParamError("%s: %s does not fit a 32-bit GLSL float "
+                             "(|value| must stay below 3.4e38; the shader "
+                             "would compile it as inf)" % (key, _num_text(v)))
+        _check_hard(key, spec, v, raw)
+        return v
+    if t == "int":
+        try:
+            v = int(round(float(raw)))
+        except (TypeError, ValueError, OverflowError):
+            raise ParamError("%s: expected an integer, got %r" % (key, raw))
+        v = quantize_int(v, spec, soft=soft)
+        if not (GLSL_INT_MIN <= v <= GLSL_INT_MAX):
+            raise ParamError("%s: %d does not fit a 32-bit GLSL int "
+                             "(%d..%d; the shader would wrap or reject the "
+                             "literal)" % (key, v, GLSL_INT_MIN, GLSL_INT_MAX))
+        _check_hard(key, spec, v, raw)
+        return v
+    if t == "bool":
+        try:
+            return parse_bool(raw)
+        except ParamError:
+            raise ParamError("%s: expected a boolean, got %r" % (key, raw))
+    if t == "enum":
+        values = spec.get("values") or {}
+        if isinstance(raw, str) and raw in values:
+            return raw
+        # accept the integer code (or a numeric string) as well
+        if not isinstance(raw, bool):
+            try:
+                code = int(str(raw).strip())
+            except (TypeError, ValueError):
+                code = None
+            if code is not None:
+                for name, num in values.items():
+                    if num == code:
+                        return name
+        raise ParamError("%s: expected one of %s, got %r"
+                         % (key, "|".join(values), raw))
+    raise ParamError("%s: unknown type %r in params.json" % (key, t))
+
+
+def format_float_glsl(v):
+    """%.6g, but always containing '.' or an exponent so GLSL sees a float."""
+    s = "%.6g" % float(v)
+    if "." not in s and "e" not in s and "E" not in s:
+        s += ".0"
+    return s
+
+
+def define_value(spec, value):
+    """Value as it appears after '#define NAME '."""
+    t = spec.get("type")
+    if t == "float":
+        return format_float_glsl(value)
+    if t == "int":
+        return str(int(value))
+    if t == "bool":
+        return "1" if value else "0"
+    if t == "enum":
+        return str(int((spec.get("values") or {})[value]))
+    raise ParamError("unknown type %r" % t)
+
+
+def display_value(spec, value):
+    """Human/scriptable representation for get/list/TUI."""
+    t = spec.get("type")
+    if t == "float":
+        return "%g" % value
+    if t == "int":
+        return str(int(value))
+    if t == "bool":
+        return "on" if value else "off"
+    return str(value)  # enum member name
+
+
+# --------------------------------------------------------------------------
+# nominal range: min/max drive dial travel and the "normal" band, but a
+# value may legitimately sit outside them (Appendix A of the UX proposal:
+# "2000 scan lines is a legitimate experiment, not an error"). These helpers
+# make that state legible instead of mysterious.
+# --------------------------------------------------------------------------
+
+def range_status(spec, value):
+    """('ok' | 'over' | 'under', lo, hi): where value sits against the
+    nominal [min, max]. Non-numeric specs (bool/enum) and specs without a
+    range are always 'ok' with (None, None)."""
+    if spec.get("type") not in ("float", "int"):
+        return "ok", None, None
+    lo = spec.get("min")
+    hi = spec.get("max")
+    if hi is not None and value > hi:
+        return "over", lo, hi
+    if lo is not None and value < lo:
+        return "under", lo, hi
+    return "ok", lo, hi
+
+
+def nominal_note(spec, value):
+    """The consequence sentence for value: '' inside the nominal range;
+    otherwise spec['range_note'] (what the template math does past the
+    band, written per param) or, where the schema has none, a generic
+    sentence naming which side of the band the value lies on."""
+    status, lo, hi = range_status(spec, value)
+    if status == "ok":
+        return ""
+    note = spec.get("range_note")
+    if note:
+        return note
+    if status == "over":
+        return ("above the nominal maximum %s the shader applies the value "
+                "literally; the look is uncalibrated there" % _num_text(hi))
+    return ("below the nominal minimum %s the shader applies the value "
+            "literally; the look is uncalibrated there" % _num_text(lo))
+
+
+def outside_nominal_mark(stream=None):
+    """The ' ⚠ outside nominal' marker, or its ASCII twin when the output
+    stream cannot encode the glyph."""
+    enc = getattr(stream if stream is not None else sys.stdout,
+                  "encoding", None) or "ascii"
+    try:
+        OUTSIDE_NOMINAL_UTF.encode(enc)
+    except (LookupError, UnicodeEncodeError):
+        return OUTSIDE_NOMINAL_ASCII
+    return OUTSIDE_NOMINAL_UTF
+
+
+# --------------------------------------------------------------------------
+# terminal overrides (font-size for low-res presets, etc.)
+# --------------------------------------------------------------------------
+
+def normalize_terminal(key, raw):
+    """Validate one terminal-override entry against the whitelist.
+    Returns the canonical value or raises ParamError. Out-of-range values
+    are rejected, not clamped — a wrong font size should be loud."""
+    if key == "font-size":
+        if isinstance(raw, bool):
+            raise ParamError("terminal font-size: expected a number, got %r" % (raw,))
+        try:
+            v = float(raw)
+        except (TypeError, ValueError):
+            raise ParamError("terminal font-size: expected a number, got %r" % (raw,))
+        if not math.isfinite(v) or not (FONT_SIZE_MIN <= v <= FONT_SIZE_MAX):
+            raise ParamError("terminal font-size: must be %g..%g, got %r"
+                             % (FONT_SIZE_MIN, FONT_SIZE_MAX, raw))
+        return int(v) if v.is_integer() else v
+    if key == "font-family":
+        if not isinstance(raw, str) or not raw.strip():
+            raise ParamError("terminal font-family: expected a non-empty string, "
+                             "got %r" % (raw,))
+        s = raw.strip()
+        if "\n" in s or "\r" in s:
+            raise ParamError("terminal font-family: must be a single line")
+        return s
+    raise ParamError("terminal: unknown key %r (allowed: %s)"
+                     % (key, ", ".join(TERMINAL_KEYS)))
+
+
+def format_terminal_value(v):
+    if isinstance(v, bool):
+        return str(v)
+    if isinstance(v, (int, float)):
+        return "%g" % v
+    return str(v)
+
+
+def overrides_text(terminal):
+    """Body of crt-overrides.conf: one 'key = value' line per entry (sorted
+    for determinism), empty when there are no overrides."""
+    return "".join("%s = %s\n" % (k, format_terminal_value(terminal[k]))
+                   for k in sorted(terminal))
+
+
+# --------------------------------------------------------------------------
+# preset metadata + picker helpers (pure functions, unit-tested)
+# --------------------------------------------------------------------------
+
+def _meta_year(name, description):
+    """Model year: the -19xx/-20xx suffix of the preset name, else the
+    first 19xx/20xx figure in the description ('1960s' counts), else None."""
+    m = re.search(r"-((?:19|20)\d{2})$", name or "")
+    if m:
+        return int(m.group(1))
+    m = re.search(r"\b((?:19|20)\d{2})", description or "")
+    return int(m.group(1)) if m else None
+
+
+def _meta_price(description):
+    """First $ figure in the description as a number (commas stripped;
+    '$1,000 - ...' -> 1000, '$319.95' -> 319.95), or None."""
+    m = re.search(r"\$\s*([0-9][\d,]*(?:\.\d+)?)", description or "")
+    if not m:
+        return None
+    v = float(m.group(1).replace(",", ""))
+    return int(v) if v.is_integer() else v
+
+
+def _meta_manufacturer(name):
+    """Manufacturer from the preset name: the hand map first, then the
+    manufacturer-prefix table (first hyphen token, then bare prefix so
+    ibm5151/applecolor resolve). None when nothing matches."""
+    n = (name or "").strip().lower()
+    if n in PRESET_MAKER_SPECIAL:
+        return PRESET_MAKER_SPECIAL[n]
+    head = n.split("-", 1)[0]
+    if head in PRESET_MAKERS:
+        return PRESET_MAKERS[head]
+    for prefix in sorted(PRESET_MAKERS, key=len, reverse=True):
+        if n.startswith(prefix):
+            return PRESET_MAKERS[prefix]
+    return None
+
+
+def derive_preset_meta(name, description, params, family=None):
+    """Structured metadata for one preset, written into its JSON as
+    'meta' and consumed by the picker's details pane and sort modes.
+    resolution falls back to the params.json scan_lines default (480)."""
+    if family is None:
+        family = PRESET_FAMILIES.get((name or "").strip().lower())
+    try:
+        resolution = int((params or {}).get("scan_lines", 480))
+    except (TypeError, ValueError):
+        resolution = 480
+    return {
+        "year": _meta_year(name, description),
+        "type": family,
+        "manufacturer": _meta_manufacturer(name),
+        "price_usd": _meta_price(description),
+        "resolution": resolution,
+    }
+
+
+def preset_sort_key(entry, mode):
+    """Sort key for one picker entry ({'name','meta',...}) under `mode`.
+    Missing meta / null fields always sort last; 'type' groups by family
+    then name; year/price/resolution ascend; name/manufacturer are
+    case-insensitive."""
+    meta = entry.get("meta") or {}
+    name = (entry.get("name") or "").lower()
+    if mode == "name":
+        return (name,)
+    if mode == "type":
+        fam = meta.get("type")
+        return (fam is None, fam or "", name)
+    if mode == "manufacturer":
+        maker = meta.get("manufacturer")
+        return (maker is None, (maker or "").lower(), name)
+    if mode == "year":
+        v = meta.get("year")
+    elif mode == "price":
+        v = meta.get("price_usd")
+    elif mode == "resolution":
+        v = meta.get("resolution")
+    else:
+        raise CrtError("unknown sort mode %r (have: %s)"
+                       % (mode, ", ".join(SORT_MODES)))
+    return (v is None, v if v is not None else 0, name)
+
+
+def sort_preset_entries(entries, mode):
+    """Entries sorted for the picker; see preset_sort_key."""
+    return sorted(entries, key=lambda e: preset_sort_key(e, mode))
+
+
+def center_scroll(total, sel, vis):
+    """Top index of a vis-row window over total rows that keeps sel
+    vertically centered (vim scrolloff-to-center): the cursor sits mid-
+    viewport while scrolling and only approaches the top/bottom edge near
+    the ends of the list. Pure function (unit-tested)."""
+    if vis <= 0 or total <= vis:
+        return 0
+    return max(0, min(sel - (vis - 1) // 2, total - vis))
+
+
+def characterful_overrides(preset_params, spec_map, defaults, exclude=(),
+                           limit=6):
+    """The preset's most characterful overrides: params that differ from
+    their defaults, ranked by how far they sit from the default relative
+    to the knob's range (enum/bool changes score 0.5). Headline keys in
+    `exclude` and the system group are skipped. Returns up to `limit`
+    (key, normalized value) pairs, deterministic order."""
+    scored = []
+    for key, raw in (preset_params or {}).items():
+        if key in exclude or key not in spec_map:
+            continue
+        spec = spec_map[key]
+        if spec.get("group") == "system":
+            continue
+        try:
+            v = normalize_value(key, spec, raw)
+        except ParamError:
+            continue
+        d = defaults.get(key)
+        if v == d:
+            continue
+        if spec.get("type") in ("float", "int"):
+            lo = float(spec.get("min", 0))
+            hi = float(spec.get("max", 1))
+            span = hi - lo
+            score = abs(float(v) - float(d if d is not None else lo)) / span \
+                if span > 0 else 0.0
+        else:
+            score = 0.5
+        scored.append((score, key, v))
+    scored.sort(key=lambda s: (-s[0], s[1]))
+    return [(key, v) for _score, key, v in scored[:limit]]
+
+
+def preset_detail_lines(entry, spec_map, defaults, width, utf=True):
+    """Details-pane content for one picker entry: name, meta summary,
+    word-wrapped description, headline settings (phosphor / mask / raster
+    lines / geometry / era, plus a terminal font-size override when the
+    preset carries one), then the most characterful overrides. Pure
+    function (unit-tested); returns a list of strings at most `width`
+    columns wide. Tolerates entries without meta."""
+    if width < 1:
+        return []
+    sep = " · " if utf else " | "
+    lines = [(entry.get("name") or "")[:width]]
+    meta = entry.get("meta") or {}
+    bits = []
+    if meta.get("manufacturer"):
+        bits.append(str(meta["manufacturer"]))
+    if meta.get("year"):
+        bits.append(str(meta["year"]))
+    if meta.get("type"):
+        bits.append(str(meta["type"]))
+    if meta.get("price_usd") is not None:
+        bits.append("$%g" % meta["price_usd"])
+    if bits:
+        lines.extend(wrap_text(sep.join(bits), width))
+    desc = entry.get("description") or ""
+    if desc:
+        lines.append("")
+        lines.extend(wrap_text(desc, width))
+    params = entry.get("params") or {}
+    rows = []
+    for key in DETAIL_KEYS:
+        spec = spec_map.get(key)
+        if spec is None:
+            continue
+        raw = params.get(key, defaults.get(key))
+        try:
+            val = display_value(spec, normalize_value(key, spec, raw))
+        except ParamError:
+            val = str(raw)
+        if spec.get("unit"):
+            val += " " + spec["unit"]
+        rows.append((spec.get("label", key.upper()), val))
+    term = entry.get("terminal") or {}
+    if isinstance(term, dict) and term.get("font-size") is not None:
+        rows.append(("FONT SIZE",
+                     format_terminal_value(term["font-size"]) + " (terminal)"))
+    extras = characterful_overrides(params, spec_map, defaults,
+                                    exclude=DETAIL_KEYS)
+    extra_rows = []
+    for key, v in extras:
+        spec = spec_map[key]
+        val = display_value(spec, v)
+        if spec.get("unit"):
+            val += " " + spec["unit"]
+        extra_rows.append((spec.get("label", key), val))
+    labw = min(16, max((len(l) for l, _v in rows + extra_rows), default=0))
+    if rows:
+        lines.append("")
+        for label, val in rows:
+            lines.append(("%-*s %s" % (labw, label[:labw], val))[:width])
+    if extra_rows:
+        lines.append("")
+        bar = "─" if utf else "-"
+        lines.append((bar + " character " + bar * max(0, width - 13))[:width])
+        for label, val in extra_rows:
+            lines.append(("%-*s %s" % (labw, label[:labw], val))[:width])
+    return lines
+
+
+# --------------------------------------------------------------------------
+# files
+# --------------------------------------------------------------------------
+
+def atomic_write(path, data):
+    """Write data to path atomically (tmp file in same dir + os.replace).
+    On any failure the destination is left untouched and the tmp is removed."""
+    d = os.path.dirname(os.path.abspath(path)) or "."
+    fd, tmp = tempfile.mkstemp(prefix=os.path.basename(path) + ".", suffix=".tmp", dir=d)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        # mkstemp creates 0600; give the final file normal umask permissions
+        umask = os.umask(0)
+        os.umask(umask)
+        os.chmod(tmp, 0o666 & ~umask)
+        _REPLACE(tmp, path)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def inject_defines(template_text, block_lines):
+    """Replace every line whose stripped content is exactly //@CRT_PARAMS@ with
+    the define block. Everything else is passed through byte-identical."""
+    out = []
+    hit = False
+    for line in template_text.splitlines(keepends=True):
+        if line.strip() == MARKER:
+            hit = True
+            nl = "\r\n" if line.endswith("\r\n") else "\n"
+            out.append(nl.join(block_lines) + nl)
+        else:
+            out.append(line)
+    if not hit:
+        raise CrtError("template has no marker line %r" % MARKER)
+    return "".join(out)
+
+
+# --------------------------------------------------------------------------
+# reload transport (subprocess argv; runner is injectable for tests):
+# D-Bus via gdbus on Linux, SIGUSR2 via pkill on macOS, or a custom
+# command from $GHOSTTY_CRT_RELOAD_CMD on any platform.
+# --------------------------------------------------------------------------
+
+def object_path_for(dest):
+    """GTK exports org.gtk.Actions at the object path derived from the
+    application ID (dots -> slashes): com.mitchellh.ghostty ->
+    /com/mitchellh/ghostty, io.arf.ghostty_phosphor ->
+    /io/arf/ghostty_phosphor."""
+    return "/" + dest.replace(".", "/")
+
+
+def build_reload_argv(dest):
+    return [
+        "gdbus", "call", "--session",
+        "--dest", dest,
+        "--object-path", object_path_for(dest),
+        "--method", "org.gtk.Actions.Activate",
+        "reload-config", "[]", "{}",
+    ]
+
+
+def build_listnames_argv():
+    return [
+        "gdbus", "call", "--session",
+        "--dest", "org.freedesktop.DBus",
+        "--object-path", "/org/freedesktop/DBus",
+        "--method", "org.freedesktop.DBus.ListNames",
+    ]
+
+
+def reload_argv(dest):
+    """argv that asks the running CRT terminal to reload its config.
+    $GHOSTTY_CRT_RELOAD_CMD (shell-style, shlex-split) overrides the
+    transport outright; otherwise D-Bus on Linux, SIGUSR2 on macOS.
+    Raises CrtError if the override is set but unparseable/empty."""
+    custom = os.environ.get(RELOAD_CMD_ENV)
+    if custom is not None:
+        try:
+            argv = shlex.split(custom)
+        except ValueError as e:
+            raise CrtError("%s: %s" % (RELOAD_CMD_ENV, e))
+        if not argv:
+            raise CrtError("%s is set but empty" % RELOAD_CMD_ENV)
+        return argv
+    if _PLATFORM == "darwin":
+        return list(DARWIN_RELOAD_ARGV)
+    return build_reload_argv(dest)
+
+
+def default_runner(argv, timeout=5.0):
+    """Run argv, return (returncode, stdout, stderr). Never raises on nonzero."""
+    proc = subprocess.run(argv, capture_output=True, text=True, timeout=timeout)
+    return proc.returncode, proc.stdout, proc.stderr
+
+
+# --------------------------------------------------------------------------
+# controller
+# --------------------------------------------------------------------------
+
+class CrtCtl:
+    """Model layer: params.json + state.json + generation + reload + presets."""
+
+    def __init__(self, base=None, runner=None, on_warn=None):
+        self.base = os.path.abspath(base or default_base())
+        self.crt_dir = os.path.join(self.base, "crt")
+        self.params_path = os.path.join(self.crt_dir, "params.json")
+        self.state_path = os.path.join(self.crt_dir, "state.json")
+        self.templates_dir = os.path.join(self.crt_dir, "templates")
+        self.presets_dir = os.path.join(self.crt_dir, "presets")
+        self.profiles_dir = os.path.join(self.crt_dir, "profiles")
+        self.shaders_dir = os.path.join(self.base, "shaders")
+        self.overrides_path = os.path.join(self.base, OVERRIDES_NAME)
+        self.runner = runner or default_runner
+        self.warnings = []
+        self.on_warn = on_warn  # optional sink (TUI); default prints to stderr
+        self.active_preset = None
+        self.last_generated = None
+        self._load_params()
+        self._load_state()
+
+    # -- warnings ----------------------------------------------------------
+
+    def warn(self, msg):
+        self.warnings.append(msg)
+        if self.on_warn is not None:
+            self.on_warn(msg)
+        else:
+            print("crtctl: warning: %s" % msg, file=sys.stderr)
+
+    # -- loading -----------------------------------------------------------
+
+    def _load_params(self):
+        try:
+            with open(self.params_path, encoding="utf-8") as f:
+                doc = json.load(f)
+        except FileNotFoundError:
+            raise CrtError("params.json not found at %s "
+                           "(set GHOSTTY_CRT_HOME?)" % self.params_path)
+        except json.JSONDecodeError as e:
+            raise CrtError("params.json is invalid JSON: %s" % e)
+        params = doc.get("params")
+        if not isinstance(params, dict) or not params:
+            raise CrtError("params.json has no 'params' map")
+        self.groups = doc.get("groups") or {}
+        self.params = params
+        self.defaults = {}
+        for key, spec in params.items():
+            if "define" not in spec or "type" not in spec:
+                raise CrtError("params.json: %s is missing 'define' or 'type'" % key)
+            self.defaults[key] = normalize_value(key, spec, spec.get("default"))
+
+    def _load_state(self):
+        self.values = dict(self.defaults)
+        self.terminal = {}
+        self.active_preset = None
+        self.last_generated = None
+        self.swap_style = "carry"
+        if not os.path.isfile(self.state_path):
+            return
+        try:
+            with open(self.state_path, encoding="utf-8") as f:
+                st = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            self.warn("state.json unreadable (%s); using defaults" % e)
+            return
+        for key, raw in (st.get("values") or {}).items():
+            if key not in self.params:
+                self.warn("state.json: unknown param %r dropped" % key)
+                continue
+            try:
+                # soft: an out-of-nominal value the user committed survives
+                # the round trip; only hard bounds (or garbage) fall back.
+                self.values[key] = normalize_value(key, self.params[key], raw,
+                                                   soft=True)
+            except ParamError as e:
+                self.warn("state.json: %s; using default" % e)
+        self.terminal = self._terminal_from_doc(st, "state.json")
+        self.active_preset = st.get("active_preset")
+        self.last_generated = st.get("last_generated")
+        style = st.get("swap_style", "carry")
+        self.swap_style = style if style in SWAP_STYLES else "carry"
+
+    def save_state(self):
+        overrides = {k: v for k, v in self.values.items() if v != self.defaults[k]}
+        doc = {
+            "version": 1,
+            "active_preset": self.active_preset,
+            "values": overrides,
+            "last_generated": self.last_generated,
+            "swap_style": getattr(self, "swap_style", "carry"),
+        }
+        if self.terminal:
+            doc["terminal"] = dict(self.terminal)
+        os.makedirs(self.crt_dir, exist_ok=True)
+        atomic_write(self.state_path, json.dumps(doc, indent=2) + "\n")
+
+    # -- get/set -----------------------------------------------------------
+
+    def _spec(self, key):
+        if key not in self.params:
+            raise ParamError("unknown parameter %r (see 'crtctl list')" % key)
+        return self.params[key]
+
+    def get(self, key):
+        self._spec(key)
+        return self.values[key]
+
+    def set(self, key, raw, soft=True):
+        """Set one value and return the canonical form.
+
+        soft=True (default): the nominal [min, max] is a band, not a wall.
+        An out-of-nominal value is accepted, quantized, and reported once
+        through warn() as
+            <key> = <v> is outside the nominal range <lo>..<hi>: <consequence>
+        where <consequence> is the schema's range_note (or a generic
+        sentence). A value beyond a hard bound raises ParamError naming the
+        bound and its hard_why — nothing is changed.
+        soft=False: dial semantics — clamp to [min, max], never warn. Use
+        this for knob-style callers that expect to stop at the end of the
+        travel (typed entry is what goes past it)."""
+        spec = self._spec(key)
+        v = normalize_value(key, spec, raw, soft=soft)
+        self.values[key] = v
+        if soft:
+            status, lo, hi = range_status(spec, v)
+            if status != "ok":
+                self.warn("%s = %s is outside the nominal range %s..%s: %s"
+                          % (key, display_value(spec, v), _num_text(lo),
+                             _num_text(hi), nominal_note(spec, v)))
+        return v
+
+    def range_status(self, key):
+        """('ok' | 'over' | 'under', lo, hi) for the current value of key
+        against its nominal range (see module-level range_status)."""
+        return range_status(self._spec(key), self.values[key])
+
+    # -- terminal overrides --------------------------------------------------
+
+    def _terminal_from_doc(self, doc, origin):
+        """Validated copy of doc['terminal'] (whitelist enforced). Invalid
+        entries warn and drop — a bad file must not brick loading."""
+        term = doc.get("terminal")
+        out = {}
+        if isinstance(term, dict):
+            for k, v in term.items():
+                try:
+                    out[k] = normalize_terminal(k, v)
+                except ParamError as e:
+                    self.warn("%s: %s; entry dropped" % (origin, e))
+        elif term is not None:
+            self.warn("%s: 'terminal' must be an object; ignored" % origin)
+        return out
+
+    def set_terminal(self, key, raw):
+        """Set one whitelisted terminal override. Raises ParamError on an
+        unknown key or invalid/out-of-range value."""
+        v = normalize_terminal(key, raw)
+        self.terminal[key] = v
+        return v
+
+    def unset_terminal(self, key):
+        """Remove one override. Returns True if it was set."""
+        if key not in TERMINAL_KEYS:
+            raise ParamError("terminal: unknown key %r (allowed: %s)"
+                             % (key, ", ".join(TERMINAL_KEYS)))
+        return self.terminal.pop(key, None) is not None
+
+    def write_overrides(self):
+        """Write <base>/crt-overrides.conf atomically (empty when no
+        overrides). The launcher passes this file as --config-file, so a
+        Ghostty reload picks the values up."""
+        os.makedirs(self.base, exist_ok=True)
+        atomic_write(self.overrides_path, overrides_text(self.terminal))
+        return self.overrides_path
+
+    # -- generation --------------------------------------------------------
+
+    def define_block(self):
+        lines = [GUARD_DEFINE]
+        for key, spec in self.params.items():
+            lines.append("#define %s %s" % (spec["define"],
+                                            define_value(spec, self.values[key])))
+        return lines
+
+    def template_files(self):
+        if not os.path.isdir(self.templates_dir):
+            return []
+        return sorted(
+            os.path.join(self.templates_dir, n)
+            for n in os.listdir(self.templates_dir)
+            if n.endswith(TEMPLATE_SUFFIX)
+        )
+
+    def generate(self):
+        """Render every template into shaders/. Returns list of output paths.
+        Also rewrites crt-overrides.conf so terminal overrides always ride
+        along with a generate + reload cycle."""
+        block = self.define_block()
+        self.write_overrides()
+        templates = self.template_files()
+        if not templates:
+            self.warn("no templates in %s; nothing generated" % self.templates_dir)
+            return []
+        os.makedirs(self.shaders_dir, exist_ok=True)
+        outs = []
+        for tpl in templates:
+            name = os.path.basename(tpl)[: -len(TEMPLATE_SUFFIX)] + ".glsl"
+            out = os.path.join(self.shaders_dir, name)
+            with open(tpl, encoding="utf-8", newline="") as f:
+                text = f.read()
+            try:
+                rendered = inject_defines(text, block)
+            except CrtError as e:
+                raise CrtError("%s: %s" % (os.path.basename(tpl), e))
+            atomic_write(out, rendered)
+            outs.append(out)
+        self.last_generated = time.strftime("%Y-%m-%dT%H:%M:%S")
+        return outs
+
+    # -- reload ------------------------------------------------------------
+
+    def reload(self, dest=DEFAULT_DEST):
+        """Ask the running Ghostty to reload its config (rereads shaders).
+        Transport per reload_argv(). Returns (ok, detail); never raises."""
+        try:
+            argv = reload_argv(dest)
+        except CrtError as e:
+            self.warn(str(e))
+            return False, str(e)
+        # In the failure messages, name what we actually called: the D-Bus
+        # dest on Linux, the literal command for signal/custom transports.
+        label = dest if argv[:1] == ["gdbus"] else " ".join(argv)
+        try:
+            rc, out, err = self.runner(argv)
+        except FileNotFoundError:
+            self.warn("%s not found on PATH; reload skipped" % argv[0])
+            return False, "%s not found" % argv[0]
+        except subprocess.TimeoutExpired:
+            self.warn("%s timed out (target %s)" % (argv[0], label))
+            return False, "timeout"
+        except OSError as e:
+            self.warn("%s failed: %s" % (argv[0], e))
+            return False, str(e)
+        if rc != 0:
+            detail = (err or out or "").strip().splitlines()
+            detail = detail[-1] if detail else ("exit %d" % rc)
+            if "ServiceUnknown" in detail:
+                detail = ("no instance owns %s — the CRT terminal is not "
+                          "running. Launch it with: ghostty-phosphor-crt "
+                          "(changes only show in that window; stock Ghostty "
+                          "does not load the CRT shaders)" % dest)
+            elif os.path.basename(argv[0]) == "pkill" and rc == 1:
+                detail = ("no process matches — the CRT terminal is not "
+                          "running. Launch it with: ghostty-phosphor-crt-macos "
+                          "(changes only show in that window; a plain "
+                          "Ghostty does not load the CRT shaders)")
+            self.warn("reload via %s failed: %s" % (label, detail))
+            return False, detail
+        return True, "ok"
+
+    def list_bus_names(self):
+        """All names on the session bus, or None if the query failed."""
+        try:
+            rc, out, err = self.runner(build_listnames_argv())
+        except (OSError, subprocess.TimeoutExpired) as e:
+            self.warn("could not list D-Bus names: %s" % e)
+            return None
+        if rc != 0:
+            detail = (err or out or "").strip().splitlines()
+            self.warn("could not list D-Bus names: %s"
+                      % (detail[-1] if detail else "exit %d" % rc))
+            return None
+        return re.findall(r"'([^']*)'", out)
+
+    def targets(self):
+        """Reachable ghostty instances, or None on failure. Linux:
+        session-bus names containing 'ghostty'. macOS: `pgrep -fl Ghostty`
+        lines (pid + command), [] when none run — pgrep exits 1 for that."""
+        if _PLATFORM == "darwin":
+            try:
+                rc, out, err = self.runner(list(DARWIN_TARGETS_ARGV))
+            except FileNotFoundError:
+                self.warn("pgrep not found on PATH")
+                return None
+            except (OSError, subprocess.TimeoutExpired) as e:
+                self.warn("could not list Ghostty processes: %s" % e)
+                return None
+            if rc == 1:
+                return []
+            if rc != 0:
+                detail = (err or out or "").strip().splitlines()
+                self.warn("could not list Ghostty processes: %s"
+                          % (detail[-1] if detail else "exit %d" % rc))
+                return None
+            return [l.strip() for l in out.splitlines() if l.strip()]
+        names = self.list_bus_names()
+        if names is None:
+            return None
+        return list(dict.fromkeys(n for n in names if "ghostty" in n.lower()))
+
+    def dest_reachable(self, dest):
+        """Would a reload reach something right now? True/False, or None
+        when unknowable (probe failed, or a custom reload command is set —
+        we cannot infer what it targets)."""
+        if os.environ.get(RELOAD_CMD_ENV) is not None:
+            return None
+        if _PLATFORM == "darwin":
+            found = self.targets()
+            return None if found is None else bool(found)
+        names = self.list_bus_names()
+        return None if names is None else (dest in names)
+
+    # -- presets -----------------------------------------------------------
+
+    def list_presets(self):
+        """[(name, description, path)] sorted by filename."""
+        return [(e["name"], e["description"], e["path"])
+                for e in self.list_preset_docs()]
+
+    def list_preset_docs(self):
+        """Full preset documents for the picker, sorted by filename:
+        [{'name','description','meta','params','terminal','path'}].
+        'meta' is None when the preset has no (dict) meta object — user
+        saves and personal presets; the picker tolerates that everywhere."""
+        if not os.path.isdir(self.presets_dir):
+            return []
+        out = []
+        for fn in sorted(os.listdir(self.presets_dir)):
+            if not fn.endswith(".json"):
+                continue
+            path = os.path.join(self.presets_dir, fn)
+            try:
+                with open(path, encoding="utf-8") as f:
+                    doc = json.load(f)
+            except (OSError, json.JSONDecodeError) as e:
+                self.warn("preset %s unreadable: %s" % (fn, e))
+                continue
+            meta = doc.get("meta")
+            term = doc.get("terminal")
+            out.append({
+                "name": doc.get("name") or fn[:-5],
+                "description": doc.get("description") or "",
+                "meta": meta if isinstance(meta, dict) else None,
+                "params": doc.get("params") or {},
+                "terminal": term if isinstance(term, dict) else {},
+                "path": path,
+            })
+        return out
+
+    def read_preset(self, name):
+        path = os.path.join(self.presets_dir, name + ".json")
+        if not os.path.isfile(path):
+            for pname, _desc, ppath in self.list_presets():
+                if pname == name:
+                    path = ppath
+                    break
+            else:
+                raise CrtError("preset %r not found in %s" % (name, self.presets_dir))
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            raise CrtError("preset %r unreadable: %s" % (name, e))
+
+    def _merge_over_defaults(self, overrides, origin):
+        """Set self.values = defaults + overrides. Params in group 'system'
+        (power state, sequence nonces) keep their current values unless the
+        overrides name them explicitly — resetting a nonce would replay the
+        power/degauss/erase sequences. Shared by preset and profile loading."""
+        new = {}
+        for key, spec in self.params.items():
+            if spec.get("group") == "system" and key not in overrides:
+                new[key] = self.values[key]
+            else:
+                new[key] = self.defaults[key]
+        for key, raw in overrides.items():
+            if key not in self.params:
+                self.warn("%s: unknown param %r ignored" % (origin, key))
+                continue
+            try:
+                # soft: presets and profiles carry out-of-nominal values
+                # unchanged (the schema's caps are nominal, not walls);
+                # only a hard bound or a malformed value falls back.
+                new[key] = normalize_value(key, self.params[key], raw,
+                                           soft=True)
+            except ParamError as e:
+                self.warn("%s: %s; using default" % (origin, e))
+        self.values = new
+
+    @staticmethod
+    def _validate_name(name, what):
+        name = (name or "").strip()
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", name):
+            raise CrtError("%s name must match [A-Za-z0-9][A-Za-z0-9._-]* "
+                           "(got %r)" % (what, name))
+        return name
+
+    def apply_preset(self, name):
+        """defaults + preset overrides (see _merge_over_defaults for the
+        system-group rule). The preset's optional 'terminal' object REPLACES
+        the current terminal overrides — a preset without one clears them.
+
+        swap_style (state.json key, default 'carry') decides what happens
+        to the previous tube's glow: 'carry' = persistence carries over
+        and gets reinterpreted by the new phosphor (organic cross-preset
+        ghosting — official behavior, not a bug); 'degauss' = same, plus
+        the coil thunk; 'fresh' = new tube, instant clear (erase nonce)."""
+        doc = self.read_preset(name)
+        origin = "preset %r" % name
+        self._merge_over_defaults(doc.get("params") or {}, origin)
+        self.terminal = self._terminal_from_doc(doc, origin)
+        self.active_preset = doc.get("name") or name
+        style = getattr(self, "swap_style", "carry") or "carry"
+        if style == "fresh" and "erase_nonce" in self.params:
+            self._bump_nonce("erase_nonce")
+        elif style == "degauss" and "degauss_nonce" in self.params:
+            self._bump_nonce("degauss_nonce")
+
+    def save_preset(self, name, description=""):
+        """Save current non-default values (excluding group 'system')."""
+        name = self._validate_name(name, "preset")
+        params = {
+            k: self.values[k]
+            for k, spec in self.params.items()
+            if spec.get("group") != "system" and self.values[k] != self.defaults[k]
+        }
+        doc = {"name": name, "description": description or "", "params": params}
+        if self.terminal:
+            doc["terminal"] = dict(self.terminal)
+        os.makedirs(self.presets_dir, exist_ok=True)
+        path = os.path.join(self.presets_dir, name + ".json")
+        atomic_write(path, json.dumps(doc, indent=2) + "\n")
+        self.active_preset = name
+        return path
+
+    def baseline_values(self):
+        """defaults, plus the active preset's overrides if one is set."""
+        base = dict(self.defaults)
+        if self.active_preset:
+            try:
+                doc = self.read_preset(self.active_preset)
+            except CrtError:
+                return base
+            for key, raw in (doc.get("params") or {}).items():
+                if key in self.params:
+                    try:
+                        base[key] = normalize_value(key, self.params[key], raw,
+                                                    soft=True)
+                    except ParamError:
+                        pass
+        return base
+
+    def modified_from_baseline(self):
+        base = self.baseline_values()
+        return any(
+            self.values[k] != base[k]
+            for k, spec in self.params.items()
+            if spec.get("group") != "system"
+        )
+
+    # -- profiles (full-state snapshots, distinct from curated presets) ------
+
+    def list_profiles(self):
+        """[(name, saved, path)] sorted by filename."""
+        if not os.path.isdir(self.profiles_dir):
+            return []
+        out = []
+        for fn in sorted(os.listdir(self.profiles_dir)):
+            if not fn.endswith(".json"):
+                continue
+            path = os.path.join(self.profiles_dir, fn)
+            try:
+                with open(path, encoding="utf-8") as f:
+                    doc = json.load(f)
+            except (OSError, json.JSONDecodeError) as e:
+                self.warn("profile %s unreadable: %s" % (fn, e))
+                continue
+            out.append((doc.get("name") or fn[:-5], doc.get("saved") or "", path))
+        return out
+
+    def read_profile(self, name):
+        path = os.path.join(self.profiles_dir, name + ".json")
+        if not os.path.isfile(path):
+            raise CrtError("profile %r not found in %s (see 'crtctl profiles')"
+                           % (name, self.profiles_dir))
+        try:
+            with open(path, encoding="utf-8") as f:
+                return json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            raise CrtError("profile %r unreadable: %s" % (name, e))
+
+    def save_profile(self, name):
+        """Full-state snapshot: every non-default value (except the hidden
+        system-group sequence nonces — restoring one would replay its
+        power/degauss/erase animation), the active preset, and the terminal
+        overrides. Overwrites an existing profile silently."""
+        name = self._validate_name(name, "profile")
+        params = {
+            k: self.values[k]
+            for k, spec in self.params.items()
+            if self.values[k] != self.defaults[k]
+            and not (spec.get("group") == "system" and spec.get("knob") == "hidden")
+        }
+        doc = {
+            "name": name,
+            "saved": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "params": params,
+            "active_preset": self.active_preset,
+        }
+        if self.terminal:
+            doc["terminal"] = dict(self.terminal)
+        os.makedirs(self.profiles_dir, exist_ok=True)
+        path = os.path.join(self.profiles_dir, name + ".json")
+        atomic_write(path, json.dumps(doc, indent=2) + "\n")
+        return path
+
+    def load_profile(self, name):
+        """Restore exactly: defaults + stored values, active preset, terminal
+        overrides (absent = cleared). System-group nonces follow the same
+        preserve rule preset apply uses."""
+        doc = self.read_profile(name)
+        origin = "profile %r" % name
+        self._merge_over_defaults(doc.get("params") or {}, origin)
+        self.terminal = self._terminal_from_doc(doc, origin)
+        self.active_preset = doc.get("active_preset")
+
+    # -- special buttons ---------------------------------------------------
+
+    def _bump_nonce(self, key):
+        spec = self._spec(key)
+        v = int(self.values[key]) + int(spec.get("step") or 1)
+        hi = spec.get("max")
+        if hi is not None and v > int(hi):
+            v = int(spec.get("min") or 0)  # wrap instead of clamping dead
+        self.values[key] = v
+        return v
+
+    def power(self, action="toggle"):
+        """Returns (new_state, changed). Bumps power_nonce when state changes."""
+        if "power_on" not in self.params:
+            raise CrtError("params.json defines no 'power_on'")
+        cur = bool(self.values["power_on"])
+        if action == "toggle":
+            target = not cur
+        elif action == "on":
+            target = True
+        elif action == "off":
+            target = False
+        else:
+            raise ParamError("power: expected on|off|toggle, got %r" % action)
+        changed = target != cur
+        if changed:
+            self.values["power_on"] = target
+            if "power_nonce" in self.params:
+                self._bump_nonce("power_nonce")
+        return target, changed
+
+    def degauss(self):
+        """Returns the new degauss_nonce."""
+        if "degauss_nonce" not in self.params:
+            raise CrtError("params.json defines no 'degauss_nonce'")
+        return self._bump_nonce("degauss_nonce")
+
+    def erase(self):
+        """Returns the new erase_nonce (DVST storage-tube page erase)."""
+        if "erase_nonce" not in self.params:
+            raise CrtError("params.json defines no 'erase_nonce'")
+        return self._bump_nonce("erase_nonce")
+
+
+# --------------------------------------------------------------------------
+# CLI
+# --------------------------------------------------------------------------
+
+def _apply_pipeline(ctl, dest, verbose=True):
+    """generate + save_state + reload. Returns exit code (0 ok, 2 reload fail)."""
+    outs = ctl.generate()
+    ctl.save_state()
+    if verbose:
+        for o in outs:
+            print("generated %s" % o)
+    ok, detail = ctl.reload(dest)
+    if verbose:
+        print("reload %s: %s" % (dest, "ok" if ok else "FAILED (%s)" % detail))
+    return 0 if ok else 2
+
+
+def _range_text(spec, value=None):
+    """Nominal range text for list/help. With a value, a trailing
+    ' ⚠ outside nominal' (ASCII: ' ! outside nominal') marks a value that
+    sits outside the nominal band."""
+    t = spec.get("type")
+    if t == "enum":
+        return "(%s)" % "|".join(spec.get("values") or {})
+    if t == "bool":
+        return "(on|off)"
+    unit = spec.get("unit")
+    r = "[%g .. %g step %g]" % (float(spec.get("min", 0)),
+                                float(spec.get("max", 0)),
+                                float(spec.get("step", 0) or 0))
+    r += (" %s" % unit if unit else "")
+    if value is not None and range_status(spec, value)[0] != "ok":
+        r += outside_nominal_mark()
+    return r
+
+
+def cmd_get(ctl, args):
+    print(display_value(ctl._spec(args.param), ctl.get(args.param)))
+    return 0
+
+
+def cmd_set(ctl, args, dest):
+    v = ctl.set(args.param, args.value)
+    print("%s = %s" % (args.param, display_value(ctl._spec(args.param), v)))
+    return _apply_pipeline(ctl, dest, verbose=False)
+
+
+def cmd_list(ctl, args):
+    group_ids = list(ctl.groups)
+    # groups referenced by params but missing from the groups map still list
+    for spec in ctl.params.values():
+        g = spec.get("group", "")
+        if g not in group_ids:
+            group_ids.append(g)
+    if args.group:
+        if args.group not in group_ids:
+            raise CrtError("unknown group %r (have: %s)"
+                           % (args.group, ", ".join(group_ids)))
+        group_ids = [args.group]
+    for gid in group_ids:
+        keys = [k for k, s in ctl.params.items() if s.get("group") == gid]
+        if not keys:
+            continue
+        print("[%s] %s" % (gid, ctl.groups.get(gid, "")))
+        for k in keys:
+            spec = ctl.params[k]
+            val = display_value(spec, ctl.values[k])
+            print("  %-18s %-14s %12s   %s"
+                  % (k, spec.get("label", ""), val,
+                     _range_text(spec, ctl.values[k])))
+    return 0
+
+
+def cmd_apply(ctl, dest):
+    return _apply_pipeline(ctl, dest)
+
+
+def cmd_preset(ctl, args, dest):
+    if args.save:
+        if not args.name:
+            raise CrtError("preset --save requires a name")
+        path = ctl.save_preset(args.name, args.description or "")
+        ctl.save_state()
+        print("saved preset %r -> %s" % (args.name, path))
+        return 0
+    if not args.name:
+        raise CrtError("usage: crtctl preset <name>  |  crtctl preset --save <name>")
+    ctl.apply_preset(args.name)
+    print("applied preset %r" % ctl.active_preset)
+    return _apply_pipeline(ctl, dest)
+
+
+def cmd_presets(ctl):
+    presets = ctl.list_presets()
+    if not presets:
+        print("(no presets in %s)" % ctl.presets_dir)
+        return 0
+    for name, desc, _path in presets:
+        mark = "*" if name == ctl.active_preset else " "
+        print("%s %-20s %s" % (mark, name, desc))
+    return 0
+
+
+def cmd_power(ctl, args, dest):
+    state, changed = ctl.power(args.action)
+    print("power %s%s" % ("on" if state else "off",
+                          "" if changed else " (unchanged)"))
+    if not changed:
+        return 0
+    return _apply_pipeline(ctl, dest, verbose=False)
+
+
+def cmd_degauss(ctl, dest):
+    nonce = ctl.degauss()
+    print("degauss fired (nonce %d)" % nonce)
+    return _apply_pipeline(ctl, dest, verbose=False)
+
+
+def cmd_erase(ctl, dest):
+    nonce = ctl.erase()
+    print("erase fired (nonce %d)" % nonce)
+    return _apply_pipeline(ctl, dest, verbose=False)
+
+
+def cmd_save(ctl, args):
+    path = ctl.save_profile(args.name)
+    print("saved profile %r -> %s" % (args.name, path))
+    return 0
+
+
+def cmd_load(ctl, args, dest):
+    ctl.load_profile(args.name)
+    print("loaded profile %r" % args.name)
+    return _apply_pipeline(ctl, dest)
+
+
+def cmd_profiles(ctl):
+    profiles = ctl.list_profiles()
+    if not profiles:
+        print("(no profiles in %s)" % ctl.profiles_dir)
+        return 0
+    for name, saved, _path in profiles:
+        print("%-20s saved %s" % (name, saved or "(unknown)"))
+    return 0
+
+
+def cmd_terminal(ctl, args, dest):
+    if args.key is None:
+        if not ctl.terminal:
+            print("(no terminal overrides)")
+        for k in sorted(ctl.terminal):
+            print("%s = %s" % (k, format_terminal_value(ctl.terminal[k])))
+        return 0
+    if args.key not in TERMINAL_KEYS:
+        raise ParamError("terminal: unknown key %r (allowed: %s)"
+                         % (args.key, ", ".join(TERMINAL_KEYS)))
+    if args.value is None:
+        v = ctl.terminal.get(args.key)
+        print(format_terminal_value(v) if v is not None else "(unset)")
+        return 0
+    if args.value == "default":
+        was_set = ctl.unset_terminal(args.key)
+        print("%s cleared%s" % (args.key, "" if was_set else " (was unset)"))
+    else:
+        v = ctl.set_terminal(args.key, args.value)
+        print("%s = %s" % (args.key, format_terminal_value(v)))
+    return _apply_pipeline(ctl, dest, verbose=False)
+
+
+def cmd_targets(ctl):
+    names = ctl.targets()
+    if names is None:
+        return 1
+    if not names:
+        print("(no ghostty processes)" if _PLATFORM == "darwin"
+              else "(no ghostty names on the session bus)")
+        return 0
+    for n in names:
+        print(n)
+    return 0
+
+
+def cmd_status(ctl, dest):
+    print("base dir       %s" % ctl.base)
+    print("params.json    %s (%d params, %d groups)"
+          % (ctl.params_path, len(ctl.params), len(ctl.groups)))
+    print("state.json     %s%s" % (ctl.state_path,
+                                   "" if os.path.isfile(ctl.state_path)
+                                   else " (missing; defaults)"))
+    tpls = ctl.template_files()
+    print("templates      %s (%d)" % (ctl.templates_dir, len(tpls)))
+    print("shaders        %s" % ctl.shaders_dir)
+    print("presets        %s (%d)" % (ctl.presets_dir, len(ctl.list_presets())))
+    print("profiles       %s (%d)" % (ctl.profiles_dir, len(ctl.list_profiles())))
+    term = ", ".join("%s=%s" % (k, format_terminal_value(v))
+                     for k, v in sorted(ctl.terminal.items()))
+    print("term overrides %s -> %s" % (term or "(none)", ctl.overrides_path))
+    preset = ctl.active_preset or "(defaults)"
+    if ctl.modified_from_baseline():
+        preset += " (modified)"
+    print("active preset  %s" % preset)
+    try:
+        transport = " ".join(reload_argv(dest))
+    except CrtError as e:
+        transport = "(broken: %s)" % e
+    print("reload via     %s" % transport)
+    reachable = ctl.dest_reachable(dest)
+    if reachable is None:
+        reach = "unknown (probe failed or custom reload command)"
+    elif reachable:
+        reach = "reachable"
+    elif _PLATFORM == "darwin":
+        reach = "NOT running (no Ghostty process)"
+    else:
+        reach = "NOT on the session bus"
+    print("dest           %s — %s" % (dest, reach))
+    print("last generate  %s" % (ctl.last_generated or "(never)"))
+    return 0
+
+
+# --------------------------------------------------------------------------
+# TUI — the service panel
+# --------------------------------------------------------------------------
+
+def wrap_text(text, width):
+    """Greedy word-wrap. Returns a list of lines, each at most `width` chars;
+    words longer than `width` are hard-broken. Pure function (unit-tested)."""
+    if width < 1:
+        return []
+    lines = []
+    cur = ""
+    for word in (text or "").split():
+        if cur and len(cur) + 1 + len(word) <= width:
+            cur += " " + word
+            continue
+        if cur:
+            lines.append(cur)
+        while len(word) > width:
+            lines.append(word[:width])
+            word = word[width:]
+        cur = word
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def run_panel(ctl, dest, opts=None):
+    """Launch MONOSCOPE (tools/monoscope). Returns the process exit code:
+    0 normally (reload failures show in the panel, never as exit codes),
+    1 when the panel cannot run (no tty / package missing)."""
+    tools_dir = os.path.dirname(os.path.realpath(__file__))   # realpath: ~/.local/bin/crtctl is a symlink
+    if tools_dir not in sys.path:
+        sys.path.insert(0, tools_dir)
+    try:
+        from monoscope.app import run_panel as _run
+    except ImportError as e:
+        print("crtctl: error: the MONOSCOPE panel is not installed beside this "
+              "script (%s/monoscope): %s" % (tools_dir, e), file=sys.stderr)
+        return 1
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        print("crtctl: error: the panel needs a terminal (stdin and stdout must be a tty)",
+              file=sys.stderr)
+        return 1
+    import types
+    core = types.SimpleNamespace(**globals())
+    o = opts or argparse.Namespace()
+    return _run(ctl, dest, core,
+                motion=getattr(o, "motion", None),
+                flat_field=bool(getattr(o, "flat_field", False)),
+                mouse=not getattr(o, "no_mouse", False),
+                ambient_fps=getattr(o, "fps", None),
+                splash=not getattr(o, "no_splash", False))
+
+
+# --------------------------------------------------------------------------
+# entry point
+# --------------------------------------------------------------------------
+
+def build_parser():
+    common = argparse.ArgumentParser(add_help=False)
+    # SUPPRESS: a subparser must not clobber a --dest given before the verb.
+    common.add_argument("--dest", default=argparse.SUPPRESS,
+                        help="D-Bus destination (default %s)" % DEFAULT_DEST)
+    p = argparse.ArgumentParser(
+        prog="crtctl",
+        parents=[common],
+        description="Control surface for the Ghostty CRT shader simulation.")
+    # flag aliases for the profile verbs (crtctl --save night == crtctl save night)
+    p.add_argument("--save", dest="save_profile", metavar="NAME", default=None,
+                   help="alias for 'save NAME' (profile snapshot)")
+    p.add_argument("--load", dest="load_profile", metavar="NAME", default=None,
+                   help="alias for 'load NAME' (restore profile)")
+    sub = p.add_subparsers(dest="cmd")
+
+    sp = sub.add_parser("get", parents=[common], help="print one value")
+    sp.add_argument("param")
+    sp = sub.add_parser("set", parents=[common],
+                        help="set a value, regenerate, reload")
+    sp.add_argument("param")
+    sp.add_argument("value")
+    sp = sub.add_parser("list", parents=[common], help="list values + ranges")
+    sp.add_argument("group", nargs="?", default=None)
+    sub.add_parser("apply", parents=[common],
+                   help="regenerate shaders from state and reload")
+    sp = sub.add_parser("preset", parents=[common], help="apply or save a preset")
+    sp.add_argument("name", nargs="?", default=None)
+    sp.add_argument("--save", action="store_true",
+                    help="save current non-default values as <name>")
+    sp.add_argument("--description", default="")
+    sub.add_parser("presets", parents=[common], help="list presets")
+    sp = sub.add_parser("save", parents=[common],
+                        help="save a full-state profile snapshot")
+    sp.add_argument("name")
+    sp = sub.add_parser("load", parents=[common],
+                        help="restore a profile, regenerate, reload")
+    sp.add_argument("name")
+    sub.add_parser("profiles", parents=[common],
+                   help="list saved profiles with timestamps")
+    sp = sub.add_parser("terminal", parents=[common],
+                        help="terminal overrides (font-size, font-family)")
+    sp.add_argument("key", nargs="?", default=None,
+                    help="one of: %s" % ", ".join(TERMINAL_KEYS))
+    sp.add_argument("value", nargs="?", default=None,
+                    help="new value, or 'default' to clear the override")
+    sp = sub.add_parser("power", parents=[common], help="tube power")
+    sp.add_argument("action", nargs="?", default="toggle",
+                    choices=["on", "off", "toggle"])
+    sub.add_parser("degauss", parents=[common], help="fire the degauss coil")
+    sub.add_parser("erase", parents=[common],
+                   help="page erase: DVST flash / tube-swap clear elsewhere")
+    sp = sub.add_parser("swap-style", parents=[common],
+                        help="what preset switches do with the old tube's "
+                             "glow: carry (ghosts, default) / degauss / fresh")
+    sp.add_argument("style", nargs="?", default=None,
+                    choices=["carry", "degauss", "fresh"])
+    sub.add_parser("targets", parents=[common],
+                   help="list reachable ghostty instances (D-Bus names on "
+                        "Linux, processes on macOS)")
+    sub.add_parser("status", parents=[common], help="show paths and state")
+    sp = sub.add_parser("panel", parents=[common],
+                        help="launch MONOSCOPE, the control surface (default on a tty)")
+    sp.add_argument("--motion", choices=["full", "reduced", "off"], default=None,
+                    help="animation: full (default), reduced, off")
+    sp.add_argument("--no-splash", action="store_true", help="skip the logon splash")
+    sp.add_argument("--no-mouse", action="store_true", help="keyboard only (M toggles live)")
+    sp.add_argument("--fps", type=float, default=None, help="ambient frame rate (default 8)")
+    sp.add_argument("--flat-field", action="store_true",
+                    help="diagnostic: one flat colour on every cell (ghosts here are the shader's)")
+    return p
+
+
+def main(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    save_alias = getattr(args, "save_profile", None)
+    load_alias = getattr(args, "load_profile", None)
+    if save_alias or load_alias:
+        if args.cmd is not None or (save_alias and load_alias):
+            print("crtctl: error: --save/--load are standalone aliases "
+                  "(use one, without a subcommand)", file=sys.stderr)
+            return 1
+        args.cmd = "save" if save_alias else "load"
+        args.name = save_alias or load_alias
+    if args.cmd is None:
+        if sys.stdout.isatty():
+            args.cmd = "panel"
+        else:
+            parser.print_help(sys.stderr)
+            return 1
+    dest = getattr(args, "dest", None) or DEFAULT_DEST
+    try:
+        ctl = CrtCtl()
+        if args.cmd == "get":
+            return cmd_get(ctl, args)
+        if args.cmd == "set":
+            return cmd_set(ctl, args, dest)
+        if args.cmd == "list":
+            return cmd_list(ctl, args)
+        if args.cmd == "apply":
+            return cmd_apply(ctl, dest)
+        if args.cmd == "preset":
+            return cmd_preset(ctl, args, dest)
+        if args.cmd == "presets":
+            return cmd_presets(ctl)
+        if args.cmd == "power":
+            return cmd_power(ctl, args, dest)
+        if args.cmd == "degauss":
+            return cmd_degauss(ctl, dest)
+        if args.cmd == "erase":
+            return cmd_erase(ctl, dest)
+        if args.cmd == "swap-style":
+            if args.style is None:
+                print("swap-style = %s" % getattr(ctl, "swap_style", "carry"))
+                return 0
+            ctl.swap_style = args.style
+            ctl.save_state()
+            print("swap-style = %s (applies on the next preset switch)"
+                  % args.style)
+            return 0
+        if args.cmd == "save":
+            return cmd_save(ctl, args)
+        if args.cmd == "load":
+            return cmd_load(ctl, args, dest)
+        if args.cmd == "profiles":
+            return cmd_profiles(ctl)
+        if args.cmd == "terminal":
+            return cmd_terminal(ctl, args, dest)
+        if args.cmd == "targets":
+            return cmd_targets(ctl)
+        if args.cmd == "status":
+            return cmd_status(ctl, dest)
+        if args.cmd == "panel":
+            return run_panel(ctl, dest, args)
+    except CrtError as e:
+        print("crtctl: error: %s" % e, file=sys.stderr)
+        return 1
+    except OSError as e:
+        print("crtctl: error: %s" % e, file=sys.stderr)
+        return 1
+    parser.print_help(sys.stderr)
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

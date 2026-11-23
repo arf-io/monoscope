@@ -1,0 +1,39 @@
+{
+  "name": "panasonic-edtv-2000",
+  "description": "2000-era 42-inch EDTV plasma ($8,000+, the first flat TV on anyone's wall): coarse 852-cell grid with screen-door ribs, severe green comet trails, crawling near-black dither, solarization bands on moving faces, warm glowing blacks. Gloriously flawed.",
+  "meta": {
+    "year": 2000,
+    "type": "Plasma panels",
+    "manufacturer": "Panasonic",
+    "price_usd": 8000,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "pdp",
+    "mask_type": "grille",
+    "mask_triads": 852,
+    "mask_strength": 0.6,
+    "mask_fade": 0.3,
+    "geom_mode": "flat",
+    "corner_radius": 0.004,
+    "era": "modern90s",
+    "persistence": 1.0,
+    "pdp_dither": 0.65,
+    "pdp_contour": 0.8,
+    "pdp_black_floor": 0.006,
+    "flicker": 0.02,
+    "abl": 0.85,
+    "glass_tint": 0.75,
+    "bezel": 0.2,
+    "burnin_rate": 0.4,
+    "burnin_visibility": 0.6,
+    "h_bandwidth": 1200.0,
+    "halation": 0.0,
+    "diffusion": 0.0,
+    "noise": 0.0,
+    "hum_amp": 0.0,
+    "emi_wobble": 0.0,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.0
+  }
+}

@@ -1,0 +1,32 @@
+{
+  "name": "conrac-reference-1978",
+  "description": "Conrac color reference (1970s-80s, $3,000-5,000): the industry-standard master monitor. Boringly perfect: uniform white field, regulated HV (zero breathing), D65, no drama whatsoever.",
+  "meta": {
+    "year": 1978,
+    "type": "Broadcast/pro",
+    "manufacturer": "Conrac",
+    "price_usd": 3000,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "grille",
+    "geom_mode": "cylindrical",
+    "curve_radius": 3.5,
+    "corner_radius": 0.03,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 550.0,
+    "era": "ss80s",
+    "hum_amp": 0.01,
+    "noise": 0.005,
+    "misconvergence": 0.4,
+    "hv_breathing": 0.1,
+    "halation": 0.054,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.12,
+    "mask_triads": 550,
+    "glass_tint": 0.55,
+    "bezel": 0.25
+  }
+}

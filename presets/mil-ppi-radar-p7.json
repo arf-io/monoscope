@@ -1,0 +1,37 @@
+{
+  "name": "mil-ppi-radar-p7",
+  "description": "Military PPI radar repeater (1950s, surplus $25-75): P7 cascade \u2014 blue-white writing fire over minute-long yellow-green afterglow. Every update ghosts; the sweep origin burns first. Best with persistence cranked.",
+  "meta": {
+    "year": 1950,
+    "type": "Instruments",
+    "manufacturer": "military surplus",
+    "price_usd": 25,
+    "resolution": 300
+  },
+  "params": {
+    "phosphor": "p7",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 1.5,
+    "corner_radius": 0.08,
+    "scan_lines": 300,
+    "interlace": false,
+    "h_bandwidth": 450.0,
+    "era": "tube60s",
+    "hum_amp": 0.04,
+    "noise": 0.015,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.3,
+    "halation": 0.108,
+    "burnin_vintage": 0.24,
+    "burnin_rate": 0.24,
+    "persistence": 2.0,
+    "glass_tint": 0.45,
+    "bezel": 0.7,
+    "emi_wobble": 0.35,
+    "warmup_time_scale": 0.3
+  },
+  "terminal": {
+    "font-size": 26
+  }
+}

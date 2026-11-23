@@ -1,0 +1,34 @@
+{
+  "name": "amdek-video300a-1983",
+  "description": "Amdek Video 300A (1983, $199): the amber 'European ergonomic' option \u2014 warmer, gentler, with a slight persistence tail on scroll. Twenty dollars of eye comfort.",
+  "meta": {
+    "year": 1983,
+    "type": "Terminals (mono)",
+    "manufacturer": "Amdek",
+    "price_usd": 199,
+    "resolution": 240
+  },
+  "params": {
+    "phosphor": "p134",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 2.0,
+    "corner_radius": 0.045,
+    "scan_lines": 240,
+    "interlace": false,
+    "h_bandwidth": 700.0,
+    "era": "ss80s",
+    "hum_amp": 0.02,
+    "noise": 0.01,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.3,
+    "halation": 0.072,
+    "burnin_vintage": 0.16,
+    "burnin_rate": 0.21,
+    "glass_tint": 0.5,
+    "bezel": 0.4
+  },
+  "terminal": {
+    "font-size": 26
+  }
+}

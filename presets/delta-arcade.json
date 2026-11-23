@@ -1,0 +1,38 @@
+{
+  "name": "delta-arcade",
+  "description": "Delta-gun arcade cabinet: hexagonal triad shadow mask, deep spherical glass, 240p double-strike scanlines, tube-era power-on",
+  "meta": {
+    "year": null,
+    "type": "Arcade",
+    "manufacturer": "generic",
+    "price_usd": null,
+    "resolution": 240
+  },
+  "params": {
+    "mask_type": "delta",
+    "mask_triads": 420,
+    "mask_strength": 0.55,
+    "mask_fade": 0.4,
+    "geom_mode": "spherical",
+    "curve_radius": 2.3,
+    "corner_radius": 0.055,
+    "phosphor": "p22",
+    "scan_lines": 240,
+    "scan_min_width": 0.26,
+    "scan_bloom": 0.75,
+    "h_bandwidth": 380.0,
+    "misconvergence": 1.1,
+    "era": "tube60s",
+    "hv_breathing": 0.45,
+    "halation": 0.09,
+    "diffusion": 0.12,
+    "glass_tint": 0.6,
+    "noise": 0.008,
+    "flicker": 0.01,
+    "bezel": 0.55,
+    "warmup_time_scale": 0.2
+  },
+  "terminal": {
+    "font-size": 26
+  }
+}

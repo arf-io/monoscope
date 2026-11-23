@@ -1,0 +1,37 @@
+{
+  "name": "smartdark-creme",
+  "description": "Daily driver: physically-grounded subtle CRT tuned for the SmartDark creme palette \u2014 faint grille, fine raster, FD-flat",
+  "meta": {
+    "year": null,
+    "type": "Daily drivers",
+    "manufacturer": "ghostcrtty",
+    "price_usd": null,
+    "resolution": 960
+  },
+  "params": {
+    "mask_type": "grille",
+    "mask_triads": 800,
+    "mask_strength": 0.28,
+    "mask_fade": 0.55,
+    "damper_wires": "none",
+    "geom_mode": "flat",
+    "corner_radius": 0.01,
+    "phosphor": "p22",
+    "scan_lines": 960,
+    "scan_min_width": 0.42,
+    "scan_bloom": 0.35,
+    "h_bandwidth": 1100.0,
+    "misconvergence": 0.15,
+    "era": "modern90s",
+    "halation": 0.035,
+    "diffusion": 0.05,
+    "glass_tint": 0.9,
+    "hv_breathing": 0.05,
+    "flicker": 0.0,
+    "noise": 0.0,
+    "emi_wobble": 0.0,
+    "hum_amp": 0.0,
+    "bezel": 0.12,
+    "cursor_overdrive": 0.6
+  }
+}

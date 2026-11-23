@@ -1,0 +1,32 @@
+{
+  "name": "zenith-chromacolor-1971",
+  "description": "Zenith Chromacolor (1971, ~$500): first black-matrix tube \u2014 twice the brightness of its era with deep blacks, still delta-gun corner fringes and hybrid-chassis drift. The mainstream American family upgrade.",
+  "meta": {
+    "year": 1971,
+    "type": "Consumer TV",
+    "manufacturer": "Zenith",
+    "price_usd": 500,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "delta",
+    "geom_mode": "spherical",
+    "curve_radius": 1.9,
+    "corner_radius": 0.06,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 250.0,
+    "era": "tube60s",
+    "hum_amp": 0.04,
+    "noise": 0.03,
+    "misconvergence": 1.4,
+    "hv_breathing": 0.6,
+    "halation": 0.09,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.09,
+    "mask_triads": 360,
+    "glass_tint": 0.7,
+    "bezel": 0.55
+  }
+}

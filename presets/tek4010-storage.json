@@ -1,0 +1,34 @@
+{
+  "name": "tek4010-storage",
+  "description": "Tektronix 4010 storage terminal (1972, $3,950): bistable P1 green \u2014 text latches at a fixed stored level forever, writing flashes bright-white-green, page ERASE is a full-screen flash. Auto-page on scroll; hold-mode dims after 90s idle.",
+  "meta": {
+    "year": 1972,
+    "type": "Storage tubes",
+    "manufacturer": "Tektronix",
+    "price_usd": 3950,
+    "resolution": 480
+  },
+  "params": {
+    "mask_type": "none",
+    "phosphor": "dvst",
+    "geom_mode": "spherical",
+    "curve_radius": 4.0,
+    "corner_radius": 0.03,
+    "era": "modern90s",
+    "h_bandwidth": 900.0,
+    "glass_tint": 0.5,
+    "halation": 0.0,
+    "diffusion": 0.0,
+    "noise": 0.0,
+    "hum_amp": 0.0,
+    "emi_wobble": 0.0,
+    "flicker": 0.0,
+    "hv_breathing": 0.0,
+    "bezel": 0.45,
+    "dvst_auto_erase": true,
+    "dvst_hold_dim": true,
+    "dvst_write_rate": 1.0,
+    "burnin_rate": 0.15,
+    "burnin_visibility": 0.4
+  }
+}

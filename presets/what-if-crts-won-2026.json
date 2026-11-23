@@ -1,0 +1,39 @@
+{
+  "name": "what-if-crts-won-2026",
+  "description": "FICTION: 'Sony GDM-UX910' (2026) \u2014 the counterfactual timeline where CRT R&D never stopped. Magnetically-damped 1800-triad grille (no damper wires), 1200-line raster at razor spot size, rolling scan native, vestigial bloom on peak whites because electron guns still obey physics. A plausible extrapolation, not a real product \u2014 every real preset in this bank cites hardware; this one cites a dream.",
+  "meta": {
+    "year": 2026,
+    "type": "Fiction",
+    "manufacturer": "Sony (fiction)",
+    "price_usd": null,
+    "resolution": 1200
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "grille",
+    "mask_triads": 1800,
+    "mask_strength": 0.55,
+    "mask_fade": 0.55,
+    "damper_wires": "none",
+    "geom_mode": "flat",
+    "corner_radius": 0.005,
+    "era": "modern90s",
+    "scan_lines": 1200,
+    "scan_min_width": 0.24,
+    "scan_bloom": 0.3,
+    "h_bandwidth": 1200.0,
+    "misconvergence": 0.05,
+    "rolling_scan": "auto",
+    "rolling_gain": 0.8,
+    "hv_breathing": 0.05,
+    "halation": 0.03,
+    "diffusion": 0.04,
+    "glass_tint": 0.62,
+    "bezel": 0.08,
+    "flicker": 0.0,
+    "noise": 0.0,
+    "hum_amp": 0.0,
+    "emi_wobble": 0.0,
+    "abl": 0.3
+  }
+}

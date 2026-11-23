@@ -1,0 +1,35 @@
+{
+  "name": "tek4054-opt31",
+  "description": "Tektronix 4054 Option 31 (1979): dual-phosphor storage tube \u2014 stored graphics green, refreshed dynamic objects ORANGE. The cursor is your refreshed object.",
+  "meta": {
+    "year": 1979,
+    "type": "Storage tubes",
+    "manufacturer": "Tektronix",
+    "price_usd": null,
+    "resolution": 480
+  },
+  "params": {
+    "mask_type": "none",
+    "phosphor": "dvst",
+    "geom_mode": "spherical",
+    "curve_radius": 5.5,
+    "corner_radius": 0.02,
+    "era": "modern90s",
+    "h_bandwidth": 1000.0,
+    "glass_tint": 0.45,
+    "halation": 0.0,
+    "diffusion": 0.0,
+    "noise": 0.0,
+    "hum_amp": 0.0,
+    "emi_wobble": 0.0,
+    "flicker": 0.0,
+    "hv_breathing": 0.0,
+    "bezel": 0.4,
+    "dvst_auto_erase": true,
+    "dvst_hold_dim": true,
+    "dvst_write_rate": 1.0,
+    "dvst_orange_refresh": true,
+    "burnin_rate": 0.15,
+    "burnin_visibility": 0.4
+  }
+}

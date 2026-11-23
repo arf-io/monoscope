@@ -1,0 +1,32 @@
+{
+  "name": "commodore-1084-1988",
+  "description": "Commodore 1084 (1988, ~$349): Amiga RGB pop at 15kHz \u2014 saturated, slot-textured, flyback whine included. Interlace mode flickers exactly like it should.",
+  "meta": {
+    "year": 1988,
+    "type": "PC monitors",
+    "manufacturer": "Commodore",
+    "price_usd": 349,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "slot",
+    "geom_mode": "spherical",
+    "curve_radius": 2.4,
+    "corner_radius": 0.04,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 400.0,
+    "era": "modern90s",
+    "hum_amp": 0.02,
+    "noise": 0.01,
+    "misconvergence": 0.6,
+    "hv_breathing": 0.3,
+    "halation": 0.054,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.12,
+    "mask_triads": 500,
+    "glass_tint": 0.68,
+    "bezel": 0.4
+  }
+}

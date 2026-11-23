@@ -1,0 +1,33 @@
+{
+  "name": "vt-amber",
+  "description": "DEC/Wyse amber terminal: long-persistence amber (P134-class), gentle trails on scroll and cursor blink",
+  "meta": {
+    "year": null,
+    "type": "Terminals (mono)",
+    "manufacturer": "DEC/Wyse",
+    "price_usd": null,
+    "resolution": 260
+  },
+  "params": {
+    "mask_type": "none",
+    "phosphor": "p134",
+    "persistence": 1.0,
+    "geom_mode": "spherical",
+    "curve_radius": 3.5,
+    "corner_radius": 0.035,
+    "scan_lines": 260,
+    "scan_min_width": 0.36,
+    "scan_bloom": 0.55,
+    "h_bandwidth": 650.0,
+    "era": "ss80s",
+    "glass_tint": 0.42,
+    "halation": 0.06,
+    "diffusion": 0.09,
+    "flicker": 0.004,
+    "bezel": 0.45,
+    "cursor_overdrive": 0.8
+  },
+  "terminal": {
+    "font-size": 27
+  }
+}

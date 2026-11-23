@@ -1,0 +1,29 @@
+{
+  "name": "terminal-green-p31",
+  "description": "Crisp bright terminal green (P31, the brightest phosphor): fast, minimal smear, daily-drivable mono",
+  "meta": {
+    "year": null,
+    "type": "Daily drivers",
+    "manufacturer": "ghostcrtty",
+    "price_usd": null,
+    "resolution": 480
+  },
+  "params": {
+    "mask_type": "none",
+    "phosphor": "p31",
+    "persistence": 1.0,
+    "geom_mode": "cylindrical",
+    "curve_radius": 5.0,
+    "corner_radius": 0.02,
+    "scan_lines": 480,
+    "scan_min_width": 0.3,
+    "scan_bloom": 0.45,
+    "h_bandwidth": 850.0,
+    "era": "modern90s",
+    "glass_tint": 0.5,
+    "halation": 0.05,
+    "diffusion": 0.07,
+    "flicker": 0.003,
+    "bezel": 0.3
+  }
+}

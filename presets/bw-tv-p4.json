@@ -1,0 +1,37 @@
+{
+  "name": "bw-tv-p4",
+  "description": "1960s B&W television: P4 bluish-white, no mask, 480i interlace, hum bar, snow, full tube-era dot-line-raster warmup",
+  "meta": {
+    "year": 1960,
+    "type": "Consumer TV",
+    "manufacturer": "generic",
+    "price_usd": null,
+    "resolution": 480
+  },
+  "params": {
+    "mask_type": "none",
+    "phosphor": "p4",
+    "geom_mode": "spherical",
+    "curve_radius": 2.2,
+    "corner_radius": 0.06,
+    "scan_lines": 480,
+    "interlace": true,
+    "scan_min_width": 0.4,
+    "scan_bloom": 0.65,
+    "h_bandwidth": 300.0,
+    "era": "tube60s",
+    "hum_amp": 0.03,
+    "emi_wobble": 0.3,
+    "hv_breathing": 0.55,
+    "glass_tint": 0.55,
+    "halation": 0.08,
+    "diffusion": 0.1,
+    "noise": 0.025,
+    "flicker": 0.015,
+    "bezel": 0.6,
+    "warmup_time_scale": 0.2
+  },
+  "terminal": {
+    "font-size": 22
+  }
+}

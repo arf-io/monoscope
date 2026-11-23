@@ -1,0 +1,1927 @@
+{
+  "version": 1,
+  "description": "Single source of truth for the Ghostty CRT simulation. Every parameter becomes a #define (prefix CRT_) injected at the //@CRT_PARAMS@ marker of both shader templates. crtctl renders knobs from this file; presets override defaults by name.",
+  "groups": {
+    "video": "Front-panel video controls (the pots on a real monitor)",
+    "geometry": "Deflection geometry and tube glass",
+    "scan": "Beam and raster structure",
+    "vector": "Vector / XY random-scan beam (stroke-drawn, no raster)",
+    "mask": "Color-selection mask (shadow mask / aperture grille / slot)",
+    "phosphor": "Phosphor chemistry: emission color and persistence",
+    "artifacts": "Electrical artifacts, sync, and environment",
+    "burnin": "Coulomb-aging burn-in accumulation",
+    "system": "Power state and panel-internal values (not knobs)"
+  },
+  "params": {
+    "brightness": {
+      "define": "CRT_BRIGHTNESS",
+      "type": "float",
+      "default": 0.0,
+      "min": -0.25,
+      "max": 0.25,
+      "step": 0.005,
+      "group": "video",
+      "label": "BRIGHTNESS",
+      "knob": "rotary",
+      "desc": "G1 bias / black level. Low: shadow detail crushes to black. High: blacks go grey; above ~+0.15 combined with SCREEN the retrace lines appear (repairfaq: tvwgrlin).",
+      "help": "The G1 grid bias pot: shifts the whole signal up or down before the gun. At the bottom, shadow detail crushes into black and the picture 'sinks into the tube'; at the top, blacks turn grey and, combined with SCREEN(G2) above ~0.65, the vertical-retrace diagonals become visible. Interacts with CONTRAST (gain around the same signal) and SCREEN (which lifts everything after the gun).",
+      "range_note": "the pot offsets the signal before a 0..1.4 amp clamp: past +1.4 everything is pinned at the clip rail (uniform white), past -1.4 the picture is fully black; between the band and those limits it keeps lifting or crushing linearly",
+      "bounded_by": [
+        {
+          "param": "contrast",
+          "when": "contrast > 1",
+          "effect": "the amp's 1.4 clip rail is reached sooner: positive brightness clips whites earlier and negative brightness crushes more shadow"
+        }
+      ]
+    },
+    "contrast": {
+      "define": "CRT_CONTRAST",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.4,
+      "max": 2.2,
+      "step": 0.01,
+      "group": "video",
+      "label": "CONTRAST",
+      "knob": "rotary",
+      "desc": "Video gain around mid-grey. High: highlight clipping, beam blooming (spot growth), HV breathing increases (repairfaq: tvbloom).",
+      "help": "Video amplifier gain around mid-grey. Low: flat, washed-out picture. High: highlights clip toward the amp rail, beam current soars — which widens the spot (BEAM BLOOM shows more), pulls the EHT down (HV REG breathing grows), and trips the ABL sooner. The classic 'silvery smeared whites' of a cranked contrast pot.",
+      "range_note": "gain before a 0..1.4 amp clamp: above 2.2 more of the tone scale hits the rail (highlights and mid-tones flatten to white); below 0 the picture inverts (dark-on-light); 0 is a flat grey field"
+    },
+    "focus": {
+      "define": "CRT_FOCUS",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.6,
+      "max": 2.5,
+      "step": 0.01,
+      "group": "video",
+      "label": "FOCUS",
+      "knob": "rotary",
+      "desc": "Flyback focus pot: global beam spot size multiplier. Corners are always ~1.5x softer than center (off-axis astigmatism).",
+      "help": "The flyback focus divider: scales the beam spot everywhere. Below 1.0 is unnaturally sharp (electron optics can't do that); above ~1.5 text goes soft and bloomy like a tired tube. Corners are always ~1.5x softer than center regardless (off-axis astigmatism) — this knob multiplies that.",
+      "hard_min": 0.01,
+      "hard_why": "multiplies the beam-spot sigma that divides the Gaussian line weight in scanSample: 0 is 0/0 (a NaN raster) and a negative value flips the weight sign; the floor sits one step above zero",
+      "range_note": "linear spot multiplier: above 2.5 the beam profile keeps widening until lines fuse and text dissolves; below 0.6 (down to the hard floor) it needles - line centres only, a dark screen"
+    },
+    "g2_screen": {
+      "define": "CRT_G2_SCREEN",
+      "type": "float",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.005,
+      "group": "video",
+      "label": "SCREEN (G2)",
+      "knob": "rotary",
+      "desc": "Flyback SCREEN pot: master sub-brightness. Above ~0.65 the raster lifts grey and diagonal retrace lines become visible, exactly like a misadjusted G2 (repairfaq/crtdatabase).",
+      "help": "The SCREEN pot on the flyback: master acceleration-grid bias. Nominal is ~0.5 (background just extinguished). Above ~0.65 the raster lifts grey, blacks go 'fuzzy silver', and retrace diagonals appear — exactly the misadjusted-G2 look service techs hunted. Very low values dim everything the BRIGHTNESS pot can't recover.",
+      "range_note": "above 1.0 the raster lift and the retrace diagonals keep growing linearly (the picture fogs toward grey-white); below 0.55 (negatives included) nothing further changes - the pot is already at 'extinguished'",
+      "bounded_by": [
+        {
+          "param": "retrace_lines",
+          "when": "retrace_lines*0.14 > (g2_screen-0.55)*0.22",
+          "effect": "the retrace-line intensity is set by RETRACE (the larger of the two paths wins); only the grey raster lift still follows this pot"
+        }
+      ]
+    },
+    "tint": {
+      "define": "CRT_TINT",
+      "type": "float",
+      "default": 0.0,
+      "min": -30.0,
+      "max": 30.0,
+      "step": 0.5,
+      "group": "video",
+      "label": "TINT",
+      "unit": "deg",
+      "knob": "rotary",
+      "desc": "NTSC hue rotation in degrees (chroma phase). Only meaningful on color phosphors.",
+      "help": "NTSC chroma phase (the TINT knob Americans argued about). Rotates all hues ±30°: skin goes green one way, magenta the other. Color phosphors only; does nothing on mono tubes. PAL sets didn't have it (phase alternation cancels the error).",
+      "range_note": "periodic: wraps every 360 deg, so +/-180 shows complementary hues; no effect on mono phosphors",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor is a mono type (p1, p31, p39, p3, p134, p4, paperwhite, p7, p11, dvst)",
+          "effect": "no effect - the chroma adjust is compiled out for CRT_MONO"
+        }
+      ]
+    },
+    "saturation": {
+      "define": "CRT_SATURATION",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 1.6,
+      "step": 0.01,
+      "group": "video",
+      "label": "COLOR",
+      "knob": "rotary",
+      "desc": "Chroma gain. 0 = B&W broadcast on a color tube.",
+      "help": "Chroma gain. 0 turns a color tube into a B&W broadcast (luma only, mask still visible); high values oversaturate toward cartoon and increase perceived misconvergence fringing.",
+      "range_note": "chroma multiplier: above 1.6 colours keep oversaturating and clip; below 0 the chroma inverts (complementary colours)",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor is a mono type (p1, p31, p39, p3, p134, p4, paperwhite, p7, p11, dvst)",
+          "effect": "no effect - the chroma adjust is compiled out for CRT_MONO"
+        }
+      ]
+    },
+    "color_temp": {
+      "define": "CRT_COLOR_TEMP",
+      "type": "float",
+      "default": 6500.0,
+      "min": 5000.0,
+      "max": 9300.0,
+      "step": 50.0,
+      "group": "video",
+      "label": "WHITE POINT",
+      "unit": "K",
+      "knob": "rotary",
+      "desc": "White point: D65 (6500K, US/EBU broadcast) to D93 (9300K, Japanese consumer sets and Trinitrons shipped cold).",
+      "help": "White point of the gun drive balance. 6500K = D65 broadcast reference (US/EBU). 9300K = D93, the bluish 'showroom cold' white of Japanese consumer sets and most Trinitrons. Warmer than 6500K drifts toward incandescent-aged cathodes. Interacts with the phosphor's own tint on the p22_d93 preset (which is cold before this knob moves).",
+      "range_note": "saturates: the gain mix is clamped, so below 3700 K and above 9300 K there is no further change",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor is a mono type (p1, p31, p39, p3, p134, p4, paperwhite, p7, p11, dvst)",
+          "effect": "no effect - whitePoint returns the light unchanged for CRT_MONO"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = p22_d93",
+          "effect": "a fixed extra cold bias (0.94, 0.99, 1.06) is applied after this knob - 6500 K no longer reads neutral"
+        }
+      ]
+    },
+    "tube_gamma": {
+      "define": "CRT_TUBE_GAMMA",
+      "type": "float",
+      "default": 2.4,
+      "min": 2.2,
+      "max": 2.55,
+      "step": 0.01,
+      "group": "video",
+      "label": "GUN GAMMA",
+      "knob": "rotary",
+      "desc": "Electron-gun electro-optical transfer exponent (physically 2.35-2.55, origin: triode drive characteristic). Applied relative to the sRGB 2.2 the content was authored for.",
+      "help": "The electron gun's drive-to-light exponent, physically 2.35-2.55 (triode geometry, not a design choice). Applied relative to the 2.2 your content was authored for: higher = deeper shadows and punchier mids; lower = lifted, flat response like an over-driven cathode.",
+      "hard_min": 0.01,
+      "hard_why": "exponent of the gun transfer pow(signal, gamma) where signal is 0 on black pixels: GLSL pow(0, y) is undefined for y <= 0 (inf/NaN drive that poisons the phosphor feedback); the floor sits one step above zero",
+      "range_note": "exponent of the gun curve: above 2.55 shadows keep sinking and mid-tones darken (at 10+ only near-white survives); below 2.2 the response lifts and flattens toward linear at 1.0, and below 1 the curvature inverts (blacks bloom up)",
+      "bounded_by": [
+        {
+          "param": "contrast",
+          "when": "contrast > 1 (white reaches the 1.4 clip rail)",
+          "effect": "pow(1.4, gamma) grows without bound: above gamma ~33 (~25 with interlace, rolling gain and strike flash stacked) white pixels overflow the RGBA16F state texel and stick at inf until an erase"
+        },
+        {
+          "param": "brightness",
+          "when": "brightness > 0",
+          "effect": "white reaches the 1.4 clip rail sooner - the same overflow ceiling as under CONTRAST applies"
+        }
+      ]
+    },
+    "geom_mode": {
+      "define": "CRT_GEOM_MODE",
+      "type": "enum",
+      "default": "cylindrical",
+      "values": {
+        "flat": 0,
+        "cylindrical": 1,
+        "spherical": 2
+      },
+      "group": "geometry",
+      "label": "TUBE GEOMETRY",
+      "knob": "selector",
+      "desc": "flat = FD Trinitron / LCD-flat; cylindrical = Trinitron (H curve only, grille cannot curve vertically); spherical = delta/slot shadow mask tubes.",
+      "help": "The faceplate/deflection family. flat = FD Trinitron/late shadow-mask (no warp). cylindrical = classic Trinitron: curved horizontally only, dead flat vertically (the tensioned grille cannot curve). spherical = every delta/slot tube: curvature in both axes, the 'fishbowl'. Determines what FACE RADIUS bends."
+    },
+    "curve_radius": {
+      "define": "CRT_CURVE_RADIUS",
+      "type": "float",
+      "default": 4.0,
+      "min": 1.5,
+      "max": 8.0,
+      "step": 0.1,
+      "group": "geometry",
+      "label": "FACE RADIUS",
+      "unit": "screen-heights",
+      "knob": "rotary",
+      "desc": "Faceplate curvature radius in screen heights. 1950s-70s spherical ~2-2.5H; 80s-90s FST ~3-5H; Trinitron horizontal ~3-5H.",
+      "help": "Faceplate curvature radius in screen heights. 1.5-2.5 = 1950s-60s porthole glass (severe). 3-5 = 80s 'flat square' and Trinitron horizontal. 8 = nearly flat. Tighter radii magnify corner focus loss and edge geometry errors, and make MASK moiré more likely at the edges.",
+      "range_note": "clamped inside the shader: below 1.0 the warp saturates at its tightest; above 8 the face flattens asymptotically (no visible change past ~20)",
+      "bounded_by": [
+        {
+          "param": "geom_mode",
+          "when": "geom_mode = flat",
+          "effect": "no effect - the warp block is compiled out"
+        },
+        {
+          "param": "geom_mode",
+          "when": "geom_mode = cylindrical",
+          "effect": "bends the horizontal axis only (the grille cannot curve vertically)"
+        }
+      ]
+    },
+    "corner_radius": {
+      "define": "CRT_CORNER_RADIUS",
+      "type": "float",
+      "default": 0.02,
+      "min": 0.0,
+      "max": 0.09,
+      "step": 0.002,
+      "group": "geometry",
+      "label": "CORNER",
+      "knob": "rotary",
+      "desc": "Rounded tube corner size (fraction of screen). Old spherical tubes 0.04-0.06; FD Trinitron 0.008-0.015.",
+      "help": "Rounding of the visible tube corners. Old spherical tubes: 0.04-0.06 (big soft corners). FD Trinitron: ~0.01. Purely cosmetic crop — content behind the corners is lost like on real bezels.",
+      "range_note": "past 0.09 the rounding grows into the picture; at 1.0 the crop is a full circle (porthole) and beyond ~2.4 the visible area closes to nothing; below 0 the corner mask closes and the whole screen goes black"
+    },
+    "bezel": {
+      "define": "CRT_BEZEL",
+      "type": "float",
+      "default": 0.35,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "geometry",
+      "label": "BEZEL SHADE",
+      "knob": "rotary",
+      "desc": "Darkening/soft shadow at the glass edge from the bezel overhang.",
+      "help": "Shadow from the cabinet bezel overhanging the glass edge. High values eat into the picture like a deep-set portable TV; 0 is a bare studio tube.",
+      "range_note": "above 1.0 the edge shade passes black and a growing ring of the picture is clipped to black; below 0 the edges brighten instead"
+    },
+    "h_size": {
+      "define": "CRT_H_SIZE",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.85,
+      "max": 1.15,
+      "step": 0.002,
+      "group": "geometry",
+      "label": "H-SIZE",
+      "knob": "rotary",
+      "desc": "Horizontal width (yoke drive amplitude).",
+      "help": "Horizontal deflection amplitude (width coil). Under 1.0 shows black side borders (underscan — how computer monitors shipped); over 1.0 pushes content past the edge (overscan — how TVs shipped). Interacts with OVERSCAN (which does the same symmetrically) and PIN AMP (edge bowing rides on top).",
+      "range_note": "linear deflection amplitude: above 1.15 keeps overscanning (content pushed past the glass); at 0 or below the axis collapses (guarded to a black raster)",
+      "bounded_by": [
+        {
+          "param": "overscan",
+          "when": "overscan != 0",
+          "effect": "the effective width is h_size * (1 + overscan): overscan shifts where 1.0 lands"
+        }
+      ]
+    },
+    "v_size": {
+      "define": "CRT_V_SIZE",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.85,
+      "max": 1.15,
+      "step": 0.002,
+      "group": "geometry",
+      "label": "V-SIZE",
+      "knob": "rotary",
+      "desc": "Vertical height (vertical output amplitude).",
+      "help": "Vertical deflection amplitude (height pot). Same story as H-SIZE, vertically. A failing vertical output stage reads as this collapsing toward 0 — see the power-off sequence for the terminal case.",
+      "range_note": "linear deflection amplitude: above 1.15 keeps overscanning (content pushed past the glass); at 0 or below the axis collapses (guarded to a black raster)",
+      "bounded_by": [
+        {
+          "param": "overscan",
+          "when": "overscan != 0",
+          "effect": "the effective height is v_size * (1 + overscan): overscan shifts where 1.0 lands"
+        }
+      ]
+    },
+    "h_pos": {
+      "define": "CRT_H_POS",
+      "type": "float",
+      "default": 0.0,
+      "min": -0.06,
+      "max": 0.06,
+      "step": 0.001,
+      "group": "geometry",
+      "label": "H-POS",
+      "knob": "rotary",
+      "desc": "Horizontal centering (raster shift; exposes border on the opposite side).",
+      "help": "Horizontal centering (raster shift). Real sets had a centering ring on the yoke; misadjustment exposes the black porch on one side.",
+      "range_note": "linear raster shift: past +/-0.5 the whole raster leaves the glass (black); the exposed side shows the black porch"
+    },
+    "v_pos": {
+      "define": "CRT_V_POS",
+      "type": "float",
+      "default": 0.0,
+      "min": -0.06,
+      "max": 0.06,
+      "step": 0.001,
+      "group": "geometry",
+      "label": "V-POS",
+      "knob": "rotary",
+      "desc": "Vertical centering.",
+      "help": "Vertical centering. Same as H-POS, vertically.",
+      "range_note": "linear raster shift: past +/-0.5 the whole raster leaves the glass (black); the exposed side shows the black porch"
+    },
+    "pincushion": {
+      "define": "CRT_PINCUSHION",
+      "type": "float",
+      "default": 0.0,
+      "min": -0.05,
+      "max": 0.05,
+      "step": 0.001,
+      "group": "geometry",
+      "label": "PIN AMP",
+      "knob": "rotary",
+      "desc": "E-W pincushion correction residual: positive bows edges inward, negative barrels outward. Real residual ~0.5% of width.",
+      "help": "East-West correction residual. Positive: sides bow inward (pincushion); negative: outward (barrel). A healthy set holds ~0.5% of width; a dying pincushion transistor gives you the full wobble. Most visible on straight vertical lines near the edges.",
+      "range_note": "beyond about +/-0.5 the width factor crosses zero on some rows - the picture pinches to a line there and mirrors beyond it"
+    },
+    "trapezoid": {
+      "define": "CRT_TRAPEZOID",
+      "type": "float",
+      "default": 0.0,
+      "min": -0.03,
+      "max": 0.03,
+      "step": 0.001,
+      "group": "geometry",
+      "label": "KEYSTONE",
+      "knob": "rotary",
+      "desc": "Trapezoid error: top wider than bottom (yoke asymmetry).",
+      "help": "Keystone error: top wider than bottom (or vice versa) from yoke winding asymmetry. Service-menu territory — a little goes a long way.",
+      "range_note": "beyond +/-1 the width factor crosses zero at one edge - the picture pinches to a point there and mirrors past it"
+    },
+    "parallelogram": {
+      "define": "CRT_PARALLELOGRAM",
+      "type": "float",
+      "default": 0.0,
+      "min": -0.03,
+      "max": 0.03,
+      "step": 0.001,
+      "group": "geometry",
+      "label": "PARALLEL",
+      "knob": "rotary",
+      "desc": "Parallelogram shear error (yoke tilt).",
+      "help": "Raster shear from a tilted yoke: verticals lean while horizontals stay level. Also appears transiently during the tube-era power-on while sync settles.",
+      "range_note": "linear shear: large values lean the picture off the glass; no singularity"
+    },
+    "rotation": {
+      "define": "CRT_ROTATION",
+      "type": "float",
+      "default": 0.0,
+      "min": -0.02,
+      "max": 0.02,
+      "step": 0.0005,
+      "group": "geometry",
+      "label": "ROTATION",
+      "unit": "rad",
+      "knob": "rotary",
+      "desc": "Raster rotation (yoke rotation / rotation coil).",
+      "help": "Whole-raster rotation (yoke rotated in its clamp, or the rotation coil on later sets). Earth's field changes this when you turn the monitor to face a different compass direction — real installers re-adjusted on site.",
+      "range_note": "periodic in radians: wraps every 2*pi (6.283); +/-1.57 is portrait, +/-3.14 upside-down"
+    },
+    "overscan": {
+      "define": "CRT_OVERSCAN",
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 0.08,
+      "step": 0.002,
+      "group": "geometry",
+      "label": "OVERSCAN",
+      "knob": "rotary",
+      "desc": "Fraction of image pushed past the visible edge (TVs ~5%; computer monitors underscan = 0). Terminal use wants 0.",
+      "help": "How much picture is pushed past the visible glass. TVs shipped ~5% (broadcast hides edge junk there); computer monitors 0 (every pixel precious). Turn it up and the terminal's edge rows/columns vanish behind the bezel like a real console game.",
+      "range_note": "linear zoom: at 1.0 only the centre quarter of the picture is visible; negative values above -1 underscan (borders); at -1 or below the raster collapses (guarded to black)"
+    },
+    "scan_lines": {
+      "define": "CRT_SCAN_LINES",
+      "type": "int",
+      "default": 480,
+      "min": 200,
+      "max": 1200,
+      "step": 1,
+      "group": "scan",
+      "label": "RASTER LINES",
+      "knob": "rotary",
+      "desc": "Virtual visible scanline count the content is rescanned at. 240 = double-strike console look; 480 = VGA/PVM; 800+ = fine-pitch monitor where lines nearly merge.",
+      "help": "How many raster lines the virtual tube draws your terminal onto. 240 = double-strike console/8-bit look with deep black gaps between fat lines. 480 = VGA/PVM territory. 800+ = fine-pitch monitor where the raster nearly fuses. Interacts with SPOT SIZE (gap depth), BEAM BLOOM, and INTERLACE (needs ≥400 to make sense). At low counts, consider a bigger terminal font (preset terminal overrides).",
+      "hard_min": 1,
+      "hard_why": "divisor of the line pitch ((line+0.5)/lines in scanSample): 0 is a divide-by-zero and a negative count draws no lines at all; the floor is one line",
+      "range_note": "above 1200 the raster comb goes sub-pixel on this panel and aliases into moire/interference bands; past ~10^7 float precision in the line index breaks down into noise; below 200 the lines get very fat with deep gaps (a bigger terminal font helps)",
+      "bounded_by": [
+        {
+          "param": "interlace",
+          "when": "interlace on",
+          "effect": "only every other line is struck per frame: the raster reads as half the count and needs >= ~400 lines to hold together"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "scan_min_width": {
+      "define": "CRT_SCAN_MIN_WIDTH",
+      "type": "float",
+      "default": 0.32,
+      "min": 0.2,
+      "max": 0.7,
+      "step": 0.005,
+      "group": "scan",
+      "label": "SPOT SIZE",
+      "unit": "lines (sigma)",
+      "knob": "rotary",
+      "desc": "Gaussian beam spot sigma at black, in scanline heights. Small = crisp PVM lines with deep gaps; large = consumer TV where lines merge.",
+      "help": "Gaussian beam-spot sigma at black level, in scanline heights. Small (0.2-0.3): razor PVM lines with deep gaps. Large (0.5+): consumer-TV mush where lines merge. The spot GROWS from this floor with brightness (BEAM BLOOM) and FOCUS.",
+      "hard_min": 0.005,
+      "hard_why": "is the beam-spot sigma that divides the Gaussian line weight in scanSample: 0 is 0/0 (a NaN raster) and a negative value flips the weight sign; the floor sits one step above zero",
+      "range_note": "above 0.7 lines merge into a soft continuous field (no visible raster); below 0.2 lines needle toward single-pixel bright centres with black between (dark, aliased)",
+      "bounded_by": [
+        {
+          "param": "scan_lines",
+          "when": "scan_lines > ~res.y/2 (more than half a line per panel pixel)",
+          "effect": "the spot in line units is sub-pixel: SPOT SIZE has no visible effect (the raster fuses)"
+        },
+        {
+          "param": "focus",
+          "when": "focus != 1",
+          "effect": "the effective sigma is multiplied by FOCUS (and the warm-up focus multiplier): at high FOCUS the crisp sub-0.3 band is unreachable"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path uses BEAM CORE instead"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "scan_bloom": {
+      "define": "CRT_SCAN_BLOOM",
+      "type": "float",
+      "default": 0.55,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "scan",
+      "label": "BEAM BLOOM",
+      "knob": "rotary",
+      "desc": "Brightness-dependent spot growth (space charge): bright rows visibly fatten and fill their gaps (crt-geom wid = 2+2*L^4 physics, energy-normalized).",
+      "help": "How much the spot fattens with beam current (space-charge defocus). At 0 lines stay uniform (unphysical); at 1 bright rows visibly swell and fill their gaps while dim rows stay thin — the single most recognizable scanline behavior. Energy-normalized: blooming widens, never brightens.",
+      "hard_min": -0.55,
+      "hard_why": "enters the spot factor 1 + bloom*1.4*lum^0.62 with lum clamped to 1.5 (a fresh cursor strike reaches it): at -0.555 that factor is 0 on the brightest rows and the Gaussian divides by zero (NaN raster)",
+      "range_note": "above 1.0 bright rows swell further and fully fill their gaps (energy-normalised, so no brightening); between 0 and the hard floor bright rows get THINNER than dim ones (anti-bloom)",
+      "bounded_by": [
+        {
+          "param": "scan_lines",
+          "when": "scan_lines > ~res.y/2 (more than half a line per panel pixel)",
+          "effect": "the spot growth is sub-pixel: BEAM BLOOM has no visible effect"
+        },
+        {
+          "param": "contrast",
+          "when": "contrast > ~1.2",
+          "effect": "white rows exceed the shader's luminance clamp (1.5) and all bloom alike - the brightness dependence flattens at the top"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "h_bandwidth": {
+      "define": "CRT_H_BANDWIDTH",
+      "type": "float",
+      "default": 700.0,
+      "min": 200.0,
+      "max": 1200.0,
+      "step": 10.0,
+      "group": "scan",
+      "label": "BANDWIDTH",
+      "unit": "TVL",
+      "knob": "rotary",
+      "desc": "Video-amplifier bandwidth as resolvable TV lines: horizontal gaussian softness. Composite TV ~300; PVM RGB ~600-800; BVM ~900.",
+      "help": "Video amplifier bandwidth expressed as resolvable TV lines. 300 = composite-input consumer TV (soft, ringing-adjacent). 600-800 = PVM over RGB. 1100+ = studio/PC monitor. Low values smear characters horizontally; interacts with CONVERGENCE (fringes hide in the blur).",
+      "hard_min": 10.0,
+      "hard_why": "divisor of the horizontal Gaussian sigma (res.x / (bandwidth*aspect)): 0 is a divide-by-zero, undefined on the fast-math Metal and GLSL-ES targets; the floor sits one step above zero",
+      "range_note": "above 1200 the horizontal Gaussian is floored at 0.28 px - no visible change; below 200 characters smear into each other (a box blur at the floor)",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "interlace": {
+      "define": "CRT_INTERLACE",
+      "type": "bool",
+      "default": false,
+      "group": "scan",
+      "label": "INTERLACE",
+      "knob": "switch",
+      "desc": "Interlaced scanning: alternate fields carry odd/even lines. When the measured panel refresh >= FIELD RATE, this is TEMPORALLY REAL — each panel frame shows one actual field. Below that, falls back to the spatial half-line offset approximation.",
+      "help": "Real 480i never showed a full frame: each 59.94Hz field scanned only every other line, and the eye (plus phosphor decay) fused them at 29.97 frames per second. With the temporal engine, when your panel's measured refresh reaches FIELD RATE (a 60Hz panel qualifies for 59.94!), the beam genuinely injects only the current field's comb of lines each frame — line twitter on single-pixel detail, interline flicker, and pairing all emerge from the physics rather than being painted on. Fast phosphors (P22/P31) make off-field lines decay hard between visits (strong twitter, like a sharp studio monitor); long-persistence phosphors smooth it (like cheap TVs did). Costs ~half the line duty in brightness (partially compensated). Needs RASTER LINES >= ~400 to make sense.",
+      "bounded_by": [
+        {
+          "param": "scan_lines",
+          "when": "scan_lines < 400",
+          "effect": "each field carries fewer than 200 lines: the comb gaps become obvious and the picture reads as a flickering half-raster (needs >= 400)"
+        },
+        {
+          "param": "scan_rate",
+          "when": "measured panel refresh < scan_rate * 0.95",
+          "effect": "temporal fields are impossible - falls back to the spatial half-line offset"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "compiled out - a vector tube has no fields"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "compiled out - storage tubes and plasma panels have no fields"
+        }
+      ]
+    },
+    "misconvergence": {
+      "define": "CRT_MISCONVERGENCE",
+      "type": "float",
+      "default": 0.3,
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.05,
+      "group": "scan",
+      "label": "CONVERGENCE",
+      "unit": "px",
+      "knob": "rotary",
+      "desc": "Static R/B beam landing error in output pixels (colored fringes on edges), growing ~2x toward corners (dynamic convergence limits).",
+      "help": "Static R/B beam landing error in pixels. The three guns never land perfectly: red fringes on one side of edges, blue the other, ~2x worse in the corners (dynamic convergence could only do so much). Delta-gun tubes wore this proudly; Trinitron in-line guns kept it small. Blur from BANDWIDTH partially masks it.",
+      "range_note": "negative swaps which side red and blue fringe; above ~3 px the R/B taps leave the 5-tap kernel and those channels fade - the picture drifts toward green",
+      "bounded_by": [
+        {
+          "param": "h_bandwidth",
+          "when": "h_bandwidth < ~400 TVL",
+          "effect": "the horizontal blur sigma exceeds the R/B offset: the fringes are absorbed and CONVERGENCE has little visible effect"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor is a mono type (p1, p31, p39, p3, p134, p4, paperwhite, p7, p11, dvst)",
+          "effect": "no colour fringes (single gun): only a sub-pixel horizontal shift of the picture"
+        }
+      ]
+    },
+    "mask_type": {
+      "define": "CRT_MASK_TYPE",
+      "type": "enum",
+      "default": "grille",
+      "values": {
+        "none": 0,
+        "grille": 1,
+        "slot": 2,
+        "delta": 3
+      },
+      "group": "mask",
+      "label": "MASK",
+      "knob": "selector",
+      "desc": "none = monochrome tube (continuous phosphor, NO subpixel structure); grille = Trinitron vertical stripes + damper wires; slot = staggered-brick consumer TV; delta = hexagonally packed round triads.",
+      "help": "The color-selection structure. none = monochrome tube (continuous phosphor — physically has NO subpixel pattern; forced for mono phosphors). grille = Trinitron vertical stripes + damper wires. slot = staggered-brick consumer TV standard. delta = hexagonally packed round-dot triads (arcade/oldest color). Each interacts with PITCH and MASK DEPTH; masks steal light that MASK FADE and internal gain give back.",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor is a mono type (p1, p31, p39, p3, p134, p4, paperwhite, p7, p11, dvst)",
+          "effect": "no mask is compiled: the selector has no effect"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = pdp",
+          "effect": "not consulted - the plasma cell grid replaces the CRT mask"
+        }
+      ]
+    },
+    "mask_triads": {
+      "define": "CRT_MASK_TRIADS",
+      "type": "int",
+      "default": 600,
+      "min": 300,
+      "max": 2000,
+      "step": 10,
+      "group": "mask",
+      "label": "PITCH",
+      "unit": "triads/width",
+      "knob": "rotary",
+      "desc": "Triad count across the screen width (inverse of dot pitch). Consumer TV ~350-500; PVM ~600; BVM ~800-900. For pdp: cells across the panel width (852 EDTV, up to 1920 full HD).",
+      "help": "Triad density across the screen width — the inverse of dot pitch. 350-450 = living-room TV coarse. 600 = PVM. 800-900 = BVM/fine PC monitor. Higher density needs more display pixels per triad; beyond ~800 on this panel the pattern approaches the physical subpixels.",
+      "hard_min": 10,
+      "hard_why": "divisor of the mask pitch (iResolution.x / triads in maskWeight): 0 is a divide-by-zero that flattens the mask to a single tint; the floor is the first step-grid value above zero",
+      "range_note": "above 2000 the triad pitch is under a pixel and the mask aliases into a colour tint/moire; below 300 the stripes are coarse enough to read as individual RGB bars",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor is a mono type (p1, p31, p39, p3, p134, p4, paperwhite, p7, p11, dvst)",
+          "effect": "no effect - no mask is compiled"
+        },
+        {
+          "param": "mask_type",
+          "when": "mask_type = none",
+          "effect": "no effect - no mask is compiled"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = pdp",
+          "effect": "sets the plasma CELL pitch instead (852 EDTV .. 1920 full HD)"
+        }
+      ]
+    },
+    "mask_strength": {
+      "define": "CRT_MASK_STRENGTH",
+      "type": "float",
+      "default": 0.45,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "mask",
+      "label": "MASK DEPTH",
+      "knob": "rotary",
+      "desc": "How dark the off-phosphor channels go. 1.0 is physical truth but costs ~2/3 luminance on SDR; brightness compensation restores via luminance fade + gain.",
+      "help": "How dark the two 'wrong' phosphor stripes go under each mask element. 1.0 is physically true but costs ~2/3 of the light — real tubes paid that with raw gun power; an SDR panel can't. Practical range 0.3-0.6 with MASK FADE recovering highlights.",
+      "range_note": "above 1.0 the off-stripes go negative (clipped to black: a pure RGB stripe pattern with the compensation gain pinned); below 0 the mask inverts - the 'wrong' phosphors brighter than the right one",
+      "bounded_by": [
+        {
+          "param": "mask_fade",
+          "when": "mask_fade > 0",
+          "effect": "bright pixels get proportionally less mask (mask -> 1 by fade * luma): at fade 1.0 whites show no mask at all regardless of depth"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor is a mono type (p1, p31, p39, p3, p134, p4, paperwhite, p7, p11, dvst)",
+          "effect": "no effect - no mask is compiled"
+        },
+        {
+          "param": "mask_type",
+          "when": "mask_type = none",
+          "effect": "no effect - no mask is compiled"
+        }
+      ]
+    },
+    "mask_fade": {
+      "define": "CRT_MASK_FADE",
+      "type": "float",
+      "default": 0.35,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "mask",
+      "label": "MASK FADE",
+      "knob": "rotary",
+      "desc": "Luminance-dependent mask fade (zfast MASK_FADE technique): bright pixels get less mask, mimicking eye integration of overdriven phosphors without clipping.",
+      "help": "Luminance-dependent mask relief (the zfast trick): bright pixels get progressively less mask, mimicking how overdriven phosphor triads flood the eye. High values keep whites clean but weaken the mask signature; low values are honest and dim.",
+      "range_note": "above 1.0 the mask overshoots on bright pixels (inverts there); below 0 bright pixels get a deeper mask instead",
+      "bounded_by": [
+        {
+          "param": "mask_strength",
+          "when": "mask_strength = 0",
+          "effect": "nothing to fade - no effect"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor is a mono type (p1, p31, p39, p3, p134, p4, paperwhite, p7, p11, dvst)",
+          "effect": "no effect - no mask is compiled"
+        },
+        {
+          "param": "mask_type",
+          "when": "mask_type = none",
+          "effect": "no effect - no mask is compiled"
+        }
+      ]
+    },
+    "damper_wires": {
+      "define": "CRT_DAMPER_WIRES",
+      "type": "enum",
+      "default": "auto",
+      "values": {
+        "none": 0,
+        "one": 1,
+        "two": 2,
+        "auto": 3
+      },
+      "group": "mask",
+      "label": "DAMPER WIRES",
+      "knob": "selector",
+      "desc": "Aperture-grille damper wire shadows: one at 2/3 height (<17 inch tubes), two at 1/3 and 2/3 (larger). auto picks by simulated size. Grille only.",
+      "help": "The 1-2 faint horizontal shadow lines every aperture-grille tube has (tensioned wires stopping grille vibration). <17-inch: one at 2/3 height; larger: two at 1/3 and 2/3. auto picks from PITCH. Grille only — their absence on a 'Trinitron' is the tell of a fake.",
+      "bounded_by": [
+        {
+          "param": "mask_type",
+          "when": "mask_type != grille",
+          "effect": "no effect - damper wires exist only on aperture grilles"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor is a mono type (p1, p31, p39, p3, p134, p4, paperwhite, p7, p11, dvst)",
+          "effect": "no effect - no mask is compiled"
+        },
+        {
+          "param": "mask_triads",
+          "when": "damper_wires = auto",
+          "effect": "mask_triads > 520 gives two wires, otherwise one"
+        }
+      ]
+    },
+    "phosphor": {
+      "define": "CRT_PHOSPHOR",
+      "type": "enum",
+      "default": "p22",
+      "values": {
+        "p22": 0,
+        "p22_d93": 1,
+        "p1": 2,
+        "p31": 3,
+        "p39": 4,
+        "p3": 5,
+        "p134": 6,
+        "p4": 7,
+        "paperwhite": 8,
+        "p7": 9,
+        "p11": 10,
+        "dvst": 11,
+        "pdp": 12
+      },
+      "group": "phosphor",
+      "label": "PHOSPHOR",
+      "knob": "selector",
+      "desc": "Phosphor screen: p22 = color triad (EBU primaries, D65); p22_d93 = same at 9300K; p1 = scope green 20ms; p31 = bright terminal green <1ms; p39 = IBM 5151 long green 1-10s; p3 = amber 13ms; p134 = long amber (Wyse/DEC); p4 = B&W TV bluish white; paperwhite = late-80s warm mono; p7 = radar blue flash + minute-long yellow (photon-pumped slow rise); p11 = photo blue. dvst = Tektronix direct-view bistable storage tube (401x/405x): written traces persist at a fixed stored level FOREVER until the page-erase flash; no grayscale, no decay, no scrolling. pdp = plasma display panel: VUV-excited phosphors (green is willemite again!), subfield PWM artifacts, cell grid, priming-glow black floor.",
+      "help": "The screen chemistry. p22 = color triad (what sRGB was standardized around). p22_d93 = same, factory-cold white. p1 = 20ms scope green. p31 = the brightest, fastest terminal green. p39 = IBM 5151 long-persistence green (scroll smear!). p3/p134 = amber, medium/long. p4 = B&W-TV bluish white. paperwhite = late-80s warm mono. p7 = radar two-layer: blue flash + minute-class yellow afterglow with real rise lag. p11 = photographic blue. Sets decay constants, tint, and whether a mask exists at all. dvst is special: the phosphor itself is the storage element (bistable secondary-emission equilibrium, flood guns sustaining written areas indefinitely at ~8fL with a 10:1 stored-to-background contrast). Writing flashes 2-3x brighter and whiter, then settles to the fixed stored green. Nothing ever fades — erasure is a full-screen green FLASH (~12ms flood-write, ~0.75s lockout). See ERASE button and the dvst_* switches. pdp is the plasma panel: same phosphor FAMILY as CRT (the green is Zn2SiO4:Mn — willemite, chemically P1's cousin — hence the famous green motion trails at ~12ms decay vs blue's <1ms), but excited by 147/172nm xenon UV from a gas discharge per cell instead of an electron beam. No deflection, no scanlines: a fixed cell grid with a dominant horizontal black stripe, plus the subfield-PWM artifact family (dither crawl, moving-gradient contouring) and a non-zero orange-tinted black floor from priming discharges. Use the pdp_* knobs; presets: panasonic-edtv-2000, pioneer-kuro-2008, panasonic-zt60-2013."
+    },
+    "persistence": {
+      "define": "CRT_PERSISTENCE",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.0,
+      "max": 8.0,
+      "step": 0.05,
+      "group": "phosphor",
+      "label": "PERSISTENCE",
+      "knob": "rotary",
+      "desc": "Multiplier on measured decay time constants. 1.0 = registration data (labguysworld/EIA); 0 = decay disabled; >1 = artistic exaggeration.",
+      "help": "Multiplier on the measured phosphor decay times. 1.0 = the EIA registration data. 0 = decay off (LCD-instant, unphysical). Up to 8x stretches trails for effect — P39 at 4x smears like a radar hangover. Interacts with everything that moves: scrolling, cursor blink, the power-off dot's afterglow.",
+      "range_note": "0 or below disables decay entirely (LCD-instant); above 8 tails stretch further - P39 becomes a minutes-long smear; nothing else changes",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst",
+          "effect": "no effect - the storage tube never decays (the bistable latch replaces the decay model)"
+        }
+      ]
+    },
+    "trail_tint": {
+      "define": "CRT_TRAIL_TINT",
+      "type": "float",
+      "default": 0.6,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "phosphor",
+      "label": "TAIL TINT",
+      "knob": "rotary",
+      "desc": "Green/yellow bias of the deep sub-1% decay tail on color tubes (ZnS:Cu power-law afterglow + 555nm eye sensitivity). Red decays clean (Y2O2S:Eu is a line emitter).",
+      "help": "How green the deep afterglow tail reads on color tubes. Physics: the copper-activated green phosphor has a power-law tail the red line-emitter lacks, and your eye peaks at 555nm — so faded trails go green-yellow. 0 = neutral fade (unphysical but tidy).",
+      "hard_min": -0.49,
+      "hard_why": "sets the P22 green tail time constant 0.045*(0.5 + tint): at -0.5 it is 0 (divide-by-zero in the decay exponent) and below it turns negative, so the decay runs backwards and the stored excitation grows without bound; the floor sits one step above the singularity",
+      "range_note": "above 1.0 the green tail keeps lengthening (0.045*(0.5+tint) s); between 0 and the hard floor the green tail is shorter than the physical one",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor != p22 and != p22_d93",
+          "effect": "no effect - the constant only enters the P22 decay tables"
+        }
+      ]
+    },
+    "cursor_overdrive": {
+      "define": "CRT_CURSOR_OVERDRIVE",
+      "type": "float",
+      "default": 0.7,
+      "min": 0.0,
+      "max": 2.0,
+      "step": 0.05,
+      "group": "phosphor",
+      "label": "STRIKE FLASH",
+      "knob": "rotary",
+      "desc": "Fresh-strike overdrive on newly lit phosphor at the cursor (beam dwell + rise): brief brightness kick that settles within ~100ms.",
+      "help": "Fresh-strike flash on newly written phosphor at the cursor: a real beam dwelling on cold phosphor kicks brighter before settling (~100ms). 0 = flat; 2 = dramatic typewriter-hammer flashes as you type.",
+      "hard_max": 65500.0,
+      "hard_why": "the strike multiplies the drive by 1 + flash; at default video settings (drive 1.0) that must stay under the RGBA16F state texel ceiling of 65504 or the cursor cell overflows to inf and sticks lit until an erase (higher CONTRAST or GUN GAMMA lower this ceiling proportionally, see bounded_by)",
+      "range_note": "linear: above 2 the strike flash keeps growing (excitation above 1 whitens); at 0 or below the branch is skipped - no flash",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst",
+          "effect": "no effect - the storage path returns before the strike block"
+        },
+        {
+          "param": "contrast",
+          "when": "contrast > 1",
+          "effect": "the drive at the cursor exceeds 1.0, so the RGBA16F overflow ceiling (65504 / drive) is reached at a lower flash than the hard maximum"
+        }
+      ]
+    },
+    "era": {
+      "define": "CRT_ERA",
+      "type": "enum",
+      "default": "ss80s",
+      "values": {
+        "tube60s": 0,
+        "ss80s": 1,
+        "modern90s": 2
+      },
+      "group": "artifacts",
+      "label": "ERA",
+      "knob": "selector",
+      "desc": "Power-sequence personality. tube60s: heater warmup, dot -> bright line -> raster unfold with sync roll-in (scan-independent HV); ss80s: degauss thunk, HV+raster together, fade-in from cathode warmup, bloom settle; modern90s: quick clean start, spot killer on power-off (no dot).",
+      "help": "The power-supply architecture, i.e. the personality of power-on/off. tube60s: heaters warm slowly, HV exists before vertical deflection — undeflected DOT, then a bright LINE opening into the raster with sync rolling in. ss80s: flyback-derived HV (raster or nothing), degauss THUNK, slow cathode fade-in, oversized raster settling. modern90s: regulated, quick clean start, and a SPOT KILLER that skips the dot/line show at power-off (turn it off with a 60s/80s era to get the full collapse)."
+    },
+    "warmup_time_scale": {
+      "define": "CRT_WARMUP_TIME_SCALE",
+      "type": "float",
+      "default": 0.15,
+      "min": 0.02,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "artifacts",
+      "label": "WARMUP RATE",
+      "knob": "rotary",
+      "desc": "Time compression of thermal effects. 1.0 = real physics (8-15s to first light, 30-60s focus/brightness settle, ~40min luminance drift); default 0.15 keeps the sequence perceptible but usable.",
+      "help": "Time compression for thermal effects. 1.0 = literal physics: 8-15s to first light, 30-60s to focus/brightness stability, ~40min luminance drift. Default 0.15 keeps the theater but respects your patience. Affects the power-on sequence pacing and long-term settle, not the electromagnetic collapse speeds (those were always fast).",
+      "hard_min": 0.01,
+      "hard_why": "divides the post-unfold focus settle ((seq - tUnfold)/(25*ws*6.67)) and spaces the warm-up smoothstep edges (tFade = tLight + 23.3*ws): at 0 both collapse to 0/0 (NaN brightness/focus frames) and a negative value runs the envelope backwards; the floor sits one step above zero",
+      "range_note": "above 1.0 the sequence runs slower than real time (first light at 8*ws s on the 60s era); below 0.02 it becomes near-instant",
+      "bounded_by": [
+        {
+          "param": "era",
+          "when": "era = modern90s",
+          "effect": "the quick regulated start ignores WARMUP RATE; only the long thermal settle uses it"
+        }
+      ]
+    },
+    "v_hold": {
+      "define": "CRT_V_HOLD",
+      "type": "float",
+      "default": 0.0,
+      "min": -3.0,
+      "max": 3.0,
+      "step": 0.02,
+      "group": "artifacts",
+      "label": "V-HOLD",
+      "unit": "Hz",
+      "knob": "rotary",
+      "desc": "Vertical oscillator offset from field rate. Inside the hold-in range the picture stays locked but sits displaced by a standing phase error - stationary, parked off centre, blanking bar across it. Past hold-in the loop slips whole frames and the picture rolls, creeping at the edge and only reaching the beat frequency well outside it (repairfaq: tvvlockl).",
+      "help": "Vertical oscillator offset from field rate, in Hz. Three regimes, and the boundaries between them are smooth.\n\nInside the hold-in range (+/-0.15Hz) the loop still locks, but only by running at a standing phase error proportional to the detune: the picture does NOT move, it sits STILL and DISPLACED, up to half a screen out at the edge, with the black VBI bar parked across it. This is what a misadjusted vertical hold usually looks like.\n\nPast hold-in the loop sheds whole frames. The slip rate leaves zero at the boundary, so the picture creeps, hesitates at the sync pulse, tears free, settles, and creeps again - exactly like chasing the knob on a motel TV. Only well outside hold-in does it roll at the raw beat frequency: downward if the oscillator runs fast, upward if slow.",
+      "range_note": "beyond +/-3 Hz the roll rate keeps rising (about the offset in frames per second); against a 60 Hz panel it aliases past ~+/-30 Hz - the picture strobes rather than rolls",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "h_hold": {
+      "define": "CRT_H_HOLD",
+      "type": "float",
+      "default": 0.0,
+      "min": -400.0,
+      "max": 400.0,
+      "step": 2.0,
+      "group": "artifacts",
+      "label": "H-HOLD",
+      "unit": "Hz",
+      "knob": "rotary",
+      "desc": "Horizontal AFC offset. Inside hold-in the picture is simply shifted sideways by a standing phase error, wrapping with the sync bar visible. Past hold-in the line oscillator free-runs and successive lines shear into slanted 'venetian blind' bands, collapsing into barber-pole hash at large offsets.",
+      "help": "Horizontal AFC offset in Hz, against the 15734Hz line rate. Same three regimes as the vertical hold.\n\nInside hold-in (+/-45Hz) every line still starts on time relative to its neighbours, so there is no shear: the whole picture just sits sideways by the standing phase error and wraps at the edge with the sync bar showing. A horizontal hold set slightly wrong displaces the image, it does not shred it.\n\nPast hold-in the line oscillator free-runs, so each line starts later than the one above and the picture shears into the diagonal venetian blind, growing out of the displaced image rather than appearing all at once. Large offsets collapse it into barber-pole hash. Capture range on real sets was around +/-500Hz; hold-in here is narrower so the knob's range still reaches the tear it exists to show.",
+      "range_note": "beyond +/-400 Hz the shear and drift keep growing; past ~+/-8 kHz the tear aliases against the line pitch into hash and the sync bar becomes a smear",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "hum_amp": {
+      "define": "CRT_HUM_AMP",
+      "type": "float",
+      "default": 0.012,
+      "min": 0.0,
+      "max": 0.12,
+      "step": 0.002,
+      "group": "artifacts",
+      "label": "HUM BAR",
+      "knob": "rotary",
+      "desc": "Power-supply ripple leaking into video: one broad dark band drifting slowly up the screen (59.94Hz field vs 60Hz mains beat ~8s/pass).",
+      "help": "Power-supply ripple leaking into video: one broad dark band drifting up the screen. Its slow crawl is the beat between the 59.94Hz field rate and 60Hz mains. Bad filter caps = crank it. Also scallops the raster edges slightly at high values.",
+      "range_note": "above 1.0 the band drives the picture below zero (a black bar); below 0 the bar brightens instead of darkening",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "hum_period": {
+      "define": "CRT_HUM_PERIOD",
+      "type": "float",
+      "default": 8.0,
+      "min": 4.0,
+      "max": 30.0,
+      "step": 0.5,
+      "group": "artifacts",
+      "label": "HUM DRIFT",
+      "unit": "s",
+      "knob": "rotary",
+      "desc": "Seconds per full screen traversal of the hum bar.",
+      "help": "Seconds for the hum bar to traverse the screen once. ~8s is the NTSC/mains beat; longer reads as a healthier supply.",
+      "hard_min": 0.5,
+      "hard_why": "divisor of the hum-bar phase (iTime / period): 0 makes fract(inf) = NaN across the whole picture whenever HUM BAR > 0; the floor sits one step above zero",
+      "range_note": "linear: longer is a slower crawl; below 4 s the bar flickers up the screen",
+      "bounded_by": [
+        {
+          "param": "hum_amp",
+          "when": "hum_amp = 0",
+          "effect": "no effect - no bar to drift"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "emi_wobble": {
+      "define": "CRT_EMI_WOBBLE",
+      "type": "float",
+      "default": 0.08,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "artifacts",
+      "label": "EMI",
+      "knob": "rotary",
+      "desc": "External magnetic interference: sub-pixel position jitter at mains-ish rates (fans, speakers, the neighbor's vacuum).",
+      "help": "Environmental magnetic interference: sub-pixel raster jitter from fans, speakers, fluorescent ballasts, or the neighbor's power tools. Position-dependent on real sets; here it's a gentle whole-raster shimmy.",
+      "range_note": "linear jitter amplitude (0.0012*value uv units): above 1 the picture visibly shimmies; at 0 or below skipped",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - only the raster and vector paths apply the wobble"
+        }
+      ]
+    },
+    "hv_breathing": {
+      "define": "CRT_HV_BREATHING",
+      "type": "float",
+      "default": 0.25,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "artifacts",
+      "label": "HV REG",
+      "knob": "rotary",
+      "desc": "EHT sag with beam current (~1kV/mA, size ~ 1/sqrt(V)): image breathes larger and blooms on bright scenes. 0.25 maps to a healthy <=1.5% black-to-white size change; 1.0 is a dying set.",
+      "help": "EHT regulation quality. Bright scenes draw beam current, sag the anode ~1kV/mA, and the raster GROWS (size ∝ 1/√V) and defocuses — the picture 'breathes' with content. 0.25 = healthy (≤1.5% black-to-white); 1.0 = a set whose regulator is dying. Interacts with CONTRAST and ABL.",
+      "range_note": "linear: above 1 the raster grows more with picture level; below about -17 on a full-white screen the span reaches zero and the picture collapses (guarded to black)"
+    },
+    "abl": {
+      "define": "CRT_ABL",
+      "type": "float",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "artifacts",
+      "label": "ABL",
+      "knob": "rotary",
+      "desc": "Automatic beam limiter: compresses contrast when average picture level exceeds threshold (protects the tube; makes full-white screens dimmer than white text on black).",
+      "help": "Automatic Beam Limiter: compresses drive when the average picture level exceeds threshold, protecting tube and supply. Full-white screens dim; sparse bright text on black stays punchy — why terminals looked so vivid. 0 disables (unprotected, unphysically linear).",
+      "hard_min": -0.69,
+      "hard_why": "the beam-limiter gain is 1/(1 + abl*2.2*max(apl-0.35, 0)); on a full-white picture (apl 1) the denominator reaches 0 at abl = -0.7, a divide-by-zero that pushes inf into the phosphor state; the floor sits one step above it",
+      "range_note": "above 1.0 bright screens are compressed further (full white dims to a fraction); between 0 and the hard floor the limiter turns into a booster whose gain diverges toward -0.7",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "the sense line measures stroke density instead of picture level, so the limiter responds to how much is drawn"
+        }
+      ]
+    },
+    "halation": {
+      "define": "CRT_HALATION",
+      "type": "float",
+      "default": 0.06,
+      "min": 0.0,
+      "max": 0.2,
+      "step": 0.005,
+      "group": "artifacts",
+      "label": "HALATION",
+      "knob": "rotary",
+      "desc": "Faceplate internal-reflection halo: wide desaturated glow ring around bright content on dark background.",
+      "help": "Wide desaturated halo around bright content: light bouncing between phosphor, aluminization, and the faceplate's internal surfaces. The 'glow in the glass' on dark backgrounds. Overdo it and everything fogs.",
+      "range_note": "linear gain: above 0.2 the glow keeps growing until the picture fogs; below 0 it subtracts - dark halos around bright content",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has its own BEAM HALO"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "diffusion": {
+      "define": "CRT_DIFFUSION",
+      "type": "float",
+      "default": 0.08,
+      "min": 0.0,
+      "max": 0.3,
+      "step": 0.005,
+      "group": "artifacts",
+      "label": "GLASS GLOW",
+      "knob": "rotary",
+      "desc": "Tight glass/phosphor-grain scatter: the 'glowing, not printed' quality of lit phosphor.",
+      "help": "Tight colored glow hugging lit phosphor — grain scatter and the first glass surface. This is what makes characters look emitted rather than printed. Subtler than HALATION, shorter range.",
+      "range_note": "linear gain: above 0.3 the glow keeps growing until glyphs blur together; below 0 it subtracts - dark rims around lit phosphor",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has its own BEAM HALO"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "glass_tint": {
+      "define": "CRT_GLASS_TINT",
+      "type": "float",
+      "default": 0.65,
+      "min": 0.27,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "artifacts",
+      "label": "GLASS",
+      "unit": "transmission",
+      "knob": "rotary",
+      "desc": "Faceplate glass transmission: 0.42 standard mono, 0.27 dark-tint contrast glass, ~0.65 typical color. Darker glass = deeper blacks, dimmer picture (contrast improves quadratically: light crosses once, reflections twice).",
+      "help": "Faceplate transmission. 1.0 = clear glass (bright, washed-out blacks in ambient light). 0.65 = typical color tube. 0.42 = standard mono. 0.27 = the dark contrast glass of premium terminals — emitted light crosses once but reflections cross twice, so darker glass buys contrast quadratically at a brightness price.",
+      "range_note": "multiplies the light: above 1 amplifies (and the ambient floor goes negative, clipped); at 0 the picture is black except the ambient floor; below 0 the picture inverts to black and the floor lifts"
+    },
+    "noise": {
+      "define": "CRT_NOISE",
+      "type": "float",
+      "default": 0.008,
+      "min": 0.0,
+      "max": 0.1,
+      "step": 0.002,
+      "group": "artifacts",
+      "label": "SNOW",
+      "knob": "rotary",
+      "desc": "Signal-chain noise grain (RF/amplifier). Terminals on direct video should sit near 0.",
+      "help": "Signal-chain grain. Terminals on direct video: ~0. RF-modulated inputs (VCR channel 3, antenna): 0.02-0.05 with visible sparkle. High values approach snow.",
+      "range_note": "above 1.0 the modulation exceeds 100% and pixels flash black; at 0 or below skipped",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - only the raster and vector paths add snow"
+        }
+      ]
+    },
+    "retrace_lines": {
+      "define": "CRT_RETRACE_LINES",
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "artifacts",
+      "label": "RETRACE",
+      "knob": "rotary",
+      "desc": "Vertical-retrace diagonals: the beam snapping back up during VBI, visible as faint bright lines slanting bottom-left to top-right. Physically appears when G2/SCREEN is set too high (that path still works: SCREEN > ~0.65) or when the vertical-blanking circuit fails; this knob forces them independently.",
+      "help": "Force the vertical-retrace diagonals independently of G2 — the look of a failed blanking circuit. The physical path still exists: SCREEN above ~0.65 produces them 'honestly'. About 13 sweeps, slanting up-right, brighter with the picture.",
+      "range_note": "linear: above 1 the diagonals keep brightening; at 0 or below only the G2 path can produce them",
+      "bounded_by": [
+        {
+          "param": "g2_screen",
+          "when": "g2_screen > 0.55",
+          "effect": "the G2 path also draws retrace lines and the larger of the two wins: this knob only shows above (g2_screen-0.55)*0.22/0.14"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "flicker": {
+      "define": "CRT_FLICKER",
+      "type": "float",
+      "default": 0.006,
+      "min": 0.0,
+      "max": 0.05,
+      "step": 0.001,
+      "group": "artifacts",
+      "label": "FLICKER",
+      "knob": "rotary",
+      "desc": "Field-rate luminance modulation residue. NOTE: at 60Hz panel refresh a true 60Hz flicker aliases; this is a slow-beat cosmetic stand-in, honestly labeled as such.",
+      "help": "Residual field-rate luminance modulation. Honest note: your panel refreshes at 60Hz, so true 60Hz CRT flicker cannot be reproduced — this is a slow-beat stand-in that suggests it. Keep small; it's the least physical knob here.",
+      "range_note": "above 1.0 the modulation exceeds 100% and the picture blacks out on the beat troughs; below 0 just inverts the beat phase",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - REFRESH DROOP is the vector flicker"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst",
+          "effect": "no effect - a storage tube does not flicker"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = pdp",
+          "effect": "applied at 2x as large-area sustain flicker, gated to lit areas"
+        }
+      ]
+    },
+    "burnin_rate": {
+      "define": "CRT_BURNIN_RATE",
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "burnin",
+      "label": "AGING RATE",
+      "knob": "rotary",
+      "desc": "Coulomb-aging accumulation speed. Real burn-in takes thousands of hours; 1.0 compresses that to roughly an hour of static content (documented time-compression, same dose->efficiency-loss law). 0 disables accumulation.",
+      "help": "How fast the phosphor ages from YOUR session's content (Coulomb dose integration). 0 = off. 1.0 compresses thousands-of-hours physics into about an hour of static content — leave a status bar up and watch it etch. Dose survives knob changes (feedback texture) but resets on window resize.",
+      "range_note": "above 1 wear accumulates proportionally faster (dose saturates at 1, the ~35% loss); at 0 or below accumulation stops"
+    },
+    "burnin_visibility": {
+      "define": "CRT_BURNIN_VISIBILITY",
+      "type": "float",
+      "default": 0.5,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "burnin",
+      "label": "WEAR SHOW",
+      "knob": "rotary",
+      "desc": "How visible the accumulated efficiency loss is (max ~35% local luminance deficit at 1.0, matching heavily-worn tubes).",
+      "help": "How visible accumulated wear is: efficiency loss shows as darkening where bright static content lived. At 1.0 a fully-dosed region is ~35% down — heavily-worn-tube territory.",
+      "range_note": "linear: above ~2.9 fully-dosed regions go past black (clipped); below 0 worn areas brighten",
+      "bounded_by": [
+        {
+          "param": "burnin_rate",
+          "when": "burnin_rate = 0 and burnin_vintage = 0",
+          "effect": "nothing to show - no wear accumulates and none is pre-aged"
+        },
+        {
+          "param": "burnin_vintage",
+          "when": "burnin_rate = 0 and burnin_vintage = 0",
+          "effect": "nothing to show - no wear accumulates and none is pre-aged"
+        }
+      ]
+    },
+    "burnin_vintage": {
+      "define": "CRT_BURNIN_VINTAGE",
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "burnin",
+      "label": "PRE-AGED",
+      "knob": "rotary",
+      "desc": "Ships the tube pre-worn: a procedural ghost of years of terminal use (prompt column, status row, general center wear). Session accumulation adds on top.",
+      "help": "Ships the tube pre-aged: procedural ghosts of years of terminal work — 24 text rows, a hot status line, a worn left margin, center panel wear. Session accumulation (AGING RATE) adds on top of it.",
+      "range_note": "linear: above 1 the pre-aged ghosts exceed full-dose wear; at 0 or below skipped"
+    },
+    "vector_trace": {
+      "define": "CRT_VECTOR_TRACE",
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "scan",
+      "label": "VECTOR BEAM",
+      "knob": "rotary",
+      "desc": "Mix from raster scanline sampling to an isotropic XY/vector spot: no row comb, no TVL scan structure, just beam-written phosphor strokes.",
+      "help": "Vector and instrument CRTs do not build an image from fixed horizontal scanlines. The beam is steered directly in XY, leaving round spot-written strokes. This knob crossfades the display pass from raster gaussian scanline sampling to isotropic spot sampling of the phosphor state. At 1.0, scan-line combing disappears while phosphor decay, burn-in, glass, geometry, sync/power choreography, and color chemistry still run.",
+      "range_note": "clamped inside the shader: below 0 pure raster, above 1 pure vector spot - nothing beyond",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the structural vector path replaces the crossfade"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "vector_mode": {
+      "define": "CRT_VECTOR_MODE",
+      "type": "enum",
+      "values": {
+        "off": 0,
+        "outline": 1,
+        "stroke": 2
+      },
+      "default": "off",
+      "group": "vector",
+      "label": "VECTOR CLASS",
+      "knob": "selector",
+      "desc": "Structural vector/XY display class. off = raster tube (normal). outline = Sobel edge magnitude of the frame becomes the beam path (robust for any font, but thick stems read as double lines / filled areas become outlined rectangles). stroke = thresholded-luma path, for hairline fonts where the raster IS the beam path (true endpoints, dwell dots land at real stroke ends). Disables scanlines/interlace/sync/hum/retrace; keeps warp geometry, glass, burn-in, power collapse.",
+      "help": "Turns the terminal into a stroke-drawn vector monitor (Asteroids / Vectrex / Tempest class) instead of a raster tube. A vector CRT has no line raster: the beam is steered directly in XY and writes phosphor strokes, so there is NO scanline comb, no interlace, no rolling scan, no sync tear, no hum bar, no retrace — all disabled here. What remains real: deflection warp (vector tubes pincushioned WORSE than raster), glass/bezel/corner, burn-in (the famous Asteroids score-digit ghosts), power collapse-to-dot (the spot-killer era), and phosphor chemistry. There is no honest way to recover true centre-line strokes from arbitrary rasterised glyphs in one pass, so two extraction modes are offered: 'outline' takes the Sobel edge magnitude of the frame as the beam path — robust for any font, but a thick stem shows as two parallel strokes and a filled block (cursor, powerline glyph) becomes an outlined rectangle (exactly what a raster→display-list converter would do; a vector tube cannot fill). 'stroke' thresholds the luma directly — correct only when the glyphs are already ~1px hairlines (Iosevka Thin et al.), where the raster already is the beam path and endpoint dwell dots fire at real stroke ends. Content luminance modulates per-stroke brightness for free (dim comments, bright bold — the DVG's 16 intensity levels as an emergent property).",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst",
+          "effect": "the display takes the storage-tube path; the beam extraction only decides which strokes get stored"
+        }
+      ]
+    },
+    "vector_beam_core": {
+      "define": "CRT_VECTOR_BEAM_CORE",
+      "type": "float",
+      "default": 0.7,
+      "min": 0.3,
+      "max": 2.0,
+      "step": 0.01,
+      "group": "vector",
+      "label": "BEAM CORE",
+      "unit": "px",
+      "knob": "rotary",
+      "desc": "Vector beam spot core sigma in pixels (Gaussian cross-section). The thin brilliant centre of the stroke. Tek 602 measured 0.36mm @0.5uA; arcade tube FWHM is undocumented (0.5-1.5mm estimate), so this is a tuned free parameter.",
+      "help": "The Gaussian spot size of the vector beam core, in pixels. Vector strokes are a bright thin core inside a wide soft halo (BEAM HALO). Small = razor scope trace (Tek-class, the only hard number is the 602's 0.36mm); larger = the fatter relative spot of a small low-HV tube like the Vectrex (9\", 5.8kV). The real arcade-tube spot size was never published, so treat this as a look knob, not a spec. Spot grows further with excitation (additive saturation toward white at the brightest strokes).",
+      "range_note": "floored at 0.45 px inside the shader; larger cores are truncated by the 5x5 tap kernel - beyond ~2 px the spot flattens into a box",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode = off",
+          "effect": "no effect - vector path not compiled"
+        }
+      ]
+    },
+    "vector_beam_halo": {
+      "define": "CRT_VECTOR_BEAM_HALO",
+      "type": "float",
+      "default": 3.0,
+      "min": 0.0,
+      "max": 12.0,
+      "step": 0.1,
+      "group": "vector",
+      "label": "BEAM HALO",
+      "knob": "rotary",
+      "desc": "Wide soft-glow gain around vector strokes (golden-angle taps). MAME sets vector bloom far higher than raster; this is that wide halation skirt, 3-10x a raster tube's.",
+      "help": "How strong the wide soft glow around each stroke is. Vector monitors bloom far more than raster tubes — MAME's vector preset cranks bloom well above its raster default, because a slow bright beam dumps a lot of energy into the glass. This is the wide golden-angle halation skirt (the tight core is BEAM CORE). Crank it for the Star Wars / Death-Star HV-sag look; back it off for a crisp bench scope.",
+      "range_note": "linear gain: above 12 the halo swamps the strokes; below 0 subtracts a dark aura",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode = off",
+          "effect": "no effect - vector path not compiled"
+        }
+      ]
+    },
+    "vector_dot_gain": {
+      "define": "CRT_VECTOR_DOT_GAIN",
+      "type": "float",
+      "default": 1.2,
+      "min": 0.0,
+      "max": 4.0,
+      "step": 0.05,
+      "group": "vector",
+      "label": "DWELL DOTS",
+      "knob": "rotary",
+      "desc": "Endpoint/corner dwell-dot brightness. On a vector tube the beam parks at stroke ends and corners (dwell = brightness); the DVG/Vectrex drew dots by dwelling. Detected on an 8-neighbour ring in pass 1, rendered here with a longer-persistence glow.",
+      "help": "Brightness of the bright dots at stroke endpoints and corners. Physically real: a vector beam that pauses deposits more energy, so stroke ends and sharp corners burn brighter (the Vectrex BIOS literally has a Vec_Dot_Dwell delay loop; the DVG drew dots by dwelling). Pass 1 detects endpoints/corners on an 8-neighbour ring and writes dwell energy into a channel with slightly longer decay; this knob scales how bright those dots read. 0 = no dot emphasis (E&S constant-rate look); high = punchy DVG/Vectrex dots. Fires meaningfully only where strokes are single lines (stroke mode, or thin stems in outline mode — closed outlines have no endpoints).",
+      "range_note": "linear: above 4 dwell dots blow out to white blobs; below 0 endpoints darken",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode = off",
+          "effect": "no effect - vector path not compiled"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode = outline",
+          "effect": "fires only on thin stems - closed outlines have no endpoints"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor is a colour type (p22, p22_d93, pdp)",
+          "effect": "no effect - RGB carry colour, there is no dwell channel"
+        }
+      ]
+    },
+    "vector_edge_threshold": {
+      "define": "CRT_VECTOR_EDGE_THRESHOLD",
+      "type": "float",
+      "default": 0.12,
+      "min": 0.01,
+      "max": 0.6,
+      "step": 0.005,
+      "group": "vector",
+      "label": "BEAM GATE",
+      "knob": "rotary",
+      "desc": "Beam-mask threshold: Sobel edge magnitude (outline) or luma (stroke) below this is not drawn. Higher = only strong edges/bright glyphs become strokes; lower = faint anti-aliased pixels join the beam path (fatter, noisier).",
+      "help": "The cutoff that decides what counts as 'beam on'. In outline mode it thresholds the Sobel edge magnitude; in stroke mode it thresholds luma directly. Raise it to draw only the strongest edges / brightest glyphs (clean, sparse, high-contrast); lower it to let faint anti-aliased pixels into the beam path (fuller letterforms but noisier, and filled areas grow). Interacts with the font: hairline fonts want a low gate, bold/HiDPI wants a higher one to suppress the double-line.",
+      "hard_min": -0.025,
+      "hard_why": "outline mode gates the beam with smoothstep(gate, 2*gate + 0.03, edge): at -0.03 the two edges coincide (0/0, a NaN beam mask written into the feedback texture) and below it the gate inverts; the floor sits one step above the singularity",
+      "range_note": "above 0.6 only the strongest edges/brightest glyphs survive (sparse, broken strokes); between 0 and the hard floor everything with any edge magnitude is beam-on (the whole field lights)",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode = off",
+          "effect": "no effect - vector path not compiled"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode = outline vs stroke",
+          "effect": "outline thresholds the Sobel edge magnitude; stroke thresholds luma directly"
+        }
+      ]
+    },
+    "vector_flicker": {
+      "define": "CRT_VECTOR_FLICKER",
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 0.6,
+      "step": 0.01,
+      "group": "vector",
+      "label": "REFRESH DROOP",
+      "knob": "rotary",
+      "desc": "Refresh-vs-scene-complexity flicker beat. A vector monitor redraws a display list every frame; a longer list (more strokes on screen) slips the refresh below the flicker-fusion threshold. Stroke density (measured into the APL slot in vector mode) drives the beat depth. NOTE: your panel is 60Hz, so like the raster FLICKER this is an honest slow-beat stand-in.",
+      "help": "The signature vector flicker: the more you draw, the slower it refreshes, the more it flickers. A vector CRT walks a display list of strokes once per frame — Asteroids caps at ~35 objects before it 'visibly slows down', Lunar Lander runs a punishing 41Hz, Cinematronics 38Hz. In vector mode the APL sense line is redefined to measure STROKE DENSITY (average beam current IS stroke density on a real vector tube), and that drives this flicker depth: a busy screen droops and beats harder than a sparse one. Honest note (same class as the raster FLICKER knob): a 60Hz panel cannot show true sub-60Hz field flicker, so this is a slow-beat cosmetic stand-in that suggests the refresh droop rather than reproducing it.",
+      "range_note": "above 0.5 the modulation exceeds 100% on busy screens and the picture blacks out on beat troughs; below 0 inverts the beat",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode = off",
+          "effect": "no effect - vector path not compiled"
+        }
+      ]
+    },
+    "vector_grain": {
+      "define": "CRT_VECTOR_GRAIN",
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 0.5,
+      "step": 0.01,
+      "group": "vector",
+      "label": "TRACE GRAIN",
+      "knob": "rotary",
+      "desc": "Per-stroke intensity grain: fine luminance noise along the beam path (deflection-amp noise, beam-current ripple, DAC quantisation). Distinct from the full-frame snow of the NOISE knob — this only modulates lit strokes.",
+      "help": "Fine grain that rides ONLY the lit strokes, not the whole frame. Real vector traces shimmer slightly from deflection-amplifier noise, beam-current ripple, and DAC quantisation of the intensity levels — the trace is never perfectly even. This modulates per-stroke luminance with a little animated noise, leaving the black background untouched (that is the job of the NOISE / snow knob). Keep it small; a touch adds life to an otherwise glassy-clean stroke.",
+      "hard_max": 131000.0,
+      "hard_why": "in vector mode the stroke drive is scaled by 1 + grain*(noise - 0.5): above ~131000 the bright half of the noise overflows the RGBA16F state texel (65504) at drive 1.0 and those stroke texels stick at inf until an erase",
+      "range_note": "above 2 the modulation exceeds 100% and stroke texels flash dark; at 0 or below skipped",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode = off",
+          "effect": "no effect - vector path not compiled"
+        }
+      ]
+    },
+    "radar_overlay": {
+      "define": "CRT_RADAR_OVERLAY",
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "artifacts",
+      "label": "PPI GRATICULE",
+      "knob": "rotary",
+      "desc": "Radar/scope graticule intensity: range rings, bearing ticks, and center crosshair drawn by the tube beam.",
+      "help": "Adds a PPI-style instrument graticule in the same phosphor light domain as the content: concentric range rings, 30-degree bearing ticks, cardinal lines, and a center mark. Intended for P7 radar and scope presets, but kept as a normal knob so any tube can be pushed into instrument territory.",
+      "range_note": "linear gain: above 1 the graticule clips toward white; at 0 or below off",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "radar_sweep": {
+      "define": "CRT_RADAR_SWEEP",
+      "type": "float",
+      "default": 0.0,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "artifacts",
+      "label": "PPI SWEEP",
+      "knob": "rotary",
+      "desc": "Rotating radar sweep beam intensity; strongest on P7 where the blue write flash pumps the slow yellow layer.",
+      "help": "A rotating PPI sweep line, rendered before phosphor emission so P7 tubes get a blue-white write flash and yellow afterglow through the existing cascade model. This is a beam overlay, not a canned image: it respects curvature, glass, power envelope, noise, burn-in, and phosphor tint.",
+      "range_note": "linear gain: above 1 the sweep clips toward white; at 0 or below off",
+      "bounded_by": [
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "radar_sweep_rate": {
+      "define": "CRT_RADAR_SWEEP_RATE",
+      "type": "float",
+      "default": 12.0,
+      "min": 1.0,
+      "max": 60.0,
+      "step": 0.5,
+      "group": "artifacts",
+      "label": "SWEEP RPM",
+      "unit": "rpm",
+      "knob": "rotary",
+      "desc": "PPI sweep rotation speed in revolutions per minute.",
+      "help": "Radar antenna/scope sweep speed in revolutions per minute. 12 rpm is a slow search sweep, 24-36 rpm feels like short-range airport/weather displays, and 60 rpm is one revolution per second for theatrical testing.",
+      "range_note": "floored at 0.1 rpm inside the shader; above 60 spins faster - past ~1800 rpm (30 rev/s) it aliases against a 60 Hz panel and appears to stall or reverse",
+      "bounded_by": [
+        {
+          "param": "radar_sweep",
+          "when": "radar_sweep = 0",
+          "effect": "no effect - no sweep to rotate"
+        }
+      ]
+    },
+    "power_on": {
+      "define": "CRT_POWER_ON",
+      "type": "bool",
+      "default": true,
+      "group": "system",
+      "label": "POWER",
+      "knob": "button",
+      "desc": "Tube power. Turning off plays the era-correct collapse (vertical dies first: bright line, then dot fading over seconds on old sets; spot-killed black on modern). Turning on plays the era-correct warmup.",
+      "help": "Tube power. OFF plays the era's collapse: 60s/80s = vertical dies first (the picture squashes into a bright line), then horizontal (line to dot), then the dot bleeds away with the stored anode charge over seconds; modern = spot-killed fade. ON replays the era's warmup. The state machine lives in the shader — the sequence runs on the tube, not in this panel."
+    },
+    "power_nonce": {
+      "define": "CRT_POWER_NONCE",
+      "type": "int",
+      "default": 1,
+      "min": 0,
+      "max": 2048,
+      "step": 1,
+      "group": "system",
+      "knob": "hidden",
+      "label": "power seq id",
+      "desc": "Incremented by crtctl on every power toggle; the state shader detects the change against its stored copy and restarts the power sequence clock. Survives iTime never resetting.",
+      "help": "Internal sequence trigger (auto-incremented by the POWER button). The shader compares this against its stored copy to detect the event.",
+      "hard_min": -2048,
+      "hard_max": 2048,
+      "hard_why": "the shader keeps its copy of this nonce in the RGBA16F state texture; a half float represents integers exactly only up to 2048, so at 2049 the compare (stored != compiled) re-fires every frame and the sequence clock never advances - the tube stays inside its power/degauss/erase event forever"
+    },
+    "degauss_nonce": {
+      "define": "CRT_DEGAUSS_NONCE",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 2048,
+      "step": 1,
+      "group": "system",
+      "knob": "hidden",
+      "label": "degauss seq id",
+      "desc": "Incremented by the DEGAUSS button: replays the coil thunk (position wobble + purity swim decaying over ~2s, PTC thermistor curve).",
+      "help": "Internal sequence trigger (auto-incremented by DEGAUSS). Replays the coil thunk: raster shimmy and color purity swim decaying over ~2s on the PTC thermistor curve.",
+      "hard_min": -2048,
+      "hard_max": 2048,
+      "hard_why": "the shader keeps its copy of this nonce in the RGBA16F state texture; a half float represents integers exactly only up to 2048, so at 2049 the compare (stored != compiled) re-fires every frame and the sequence clock never advances - the tube stays inside its power/degauss/erase event forever"
+    },
+    "debug_state": {
+      "define": "CRT_DEBUG_STATE",
+      "type": "bool",
+      "default": false,
+      "group": "system",
+      "label": "DEBUG",
+      "knob": "hidden",
+      "desc": "Visualize the state texture (excitation/burn-in/clock channels) instead of the composed image.",
+      "help": "Renders the raw state texture (excitation RGB + burn-in dose in alpha) instead of the composed picture. Diagnostic only."
+    },
+    "dvst_auto_erase": {
+      "define": "CRT_DVST_AUTO_ERASE",
+      "type": "bool",
+      "default": true,
+      "group": "phosphor",
+      "label": "AUTO PAGE",
+      "knob": "switch",
+      "desc": "DVST: fire the page-erase flash automatically when most of the stored image no longer matches the terminal (a storage tube cannot scroll; hosts sent ESC FF).",
+      "help": "A bistable storage tube cannot unwrite anything: scrolled-away or deleted text stays glowing until the whole page is erased. Real hosts sent ESC FF to erase before redrawing; the 4051 fired the page flash when text ran past the bottom. ON approximates that: when a large fraction of stored pixels no longer matches the live terminal (a scroll or clear), the erase sequence fires and the terminal repaints onto the cleared field. OFF is museum-pure Etch-A-Sketch: only the ERASE button clears — expect a solid green screen in minutes of real use.",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor != dvst",
+          "effect": "no effect - DVST only"
+        }
+      ]
+    },
+    "dvst_hold_dim": {
+      "define": "CRT_DVST_HOLD_DIM",
+      "type": "bool",
+      "default": true,
+      "group": "phosphor",
+      "label": "HOLD MODE",
+      "knob": "switch",
+      "desc": "DVST: after ~90s of no cursor activity, pulse-dim the display to ~1/8 brightness to save the tube (4010 behavior); any activity restores.",
+      "help": "The 4010 protected its storage target during idle: after ~90 seconds it pulsed the flood guns at 75Hz/12.5% duty, dimming the whole stored image to about an eighth of normal. Any keystroke restored full view. A dimmed, waiting Tektronix was a familiar lab sight. Uses cursor activity as the idle signal.",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor != dvst",
+          "effect": "no effect - DVST only"
+        }
+      ]
+    },
+    "dvst_orange_refresh": {
+      "define": "CRT_DVST_ORANGE_REFRESH",
+      "type": "bool",
+      "default": false,
+      "group": "phosphor",
+      "label": "OPT 31 ORANGE",
+      "knob": "switch",
+      "desc": "DVST: 4054 Option 31 dual-phosphor tube — refreshed (non-stored) objects render ORANGE over the green stored image. Here: the cursor.",
+      "help": "The 4054 Option 31 fitted a dual-layer red+green storage CRT: dynamic refresh graphics (drawn below the storage threshold, re-painted ~30x/s) excited both layers and showed ORANGE, while stored content stayed green — the only production Tektronix storage tube with two colors. Mapped here to the one genuinely refreshed object a terminal has: the cursor. This is also the honest answer to 'storage phosphors showed red/orange/yellow by beam power' — that was penetration-phosphor (Penetron) refresh displays, not standard DVSTs.",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor != dvst",
+          "effect": "no effect - DVST only"
+        }
+      ]
+    },
+    "dvst_write_rate": {
+      "define": "CRT_DVST_WRITE_RATE",
+      "type": "float",
+      "default": 1.0,
+      "min": 0.1,
+      "max": 8.0,
+      "step": 0.05,
+      "group": "phosphor",
+      "label": "WRITE SPEED",
+      "knob": "rotary",
+      "desc": "DVST: how fast the writing beam draws the stored page. A DVST is a random-access VECTOR store — the beam is steered point-to-point and lays the picture down over time, so the page is written PROGRESSIVELY (top-to-bottom sweep) and a full screen takes longer than a sparse one. 1.0 = real-ish stored writing speed; higher = faster.",
+      "help": "The stored writing speed of the bistable graphics tube was SLOW — 1500-4000 vector-inches/second (Tektronix's own rating, ~cm per millisecond, NOT the cm/microsecond of variable-persistence scope tubes). That is exactly why you could WATCH a 4010 draw: a dense full screen took ~1.8-5 seconds ('several seconds for complex pictures'), a bare stroke milliseconds, and a screen clear about a second. This knob scales that. At 1.0 a densely-filled page sweeps in ~1-2.5s (a full page of text lands around ~1.5s; a solid graphic fill nearer 2.5s) and a sparse one in a fraction of a second — draw time scales with how full the page is, measured live from the ink fraction. Turn it UP to draw faster (8 = near-instant, the old flash-on behavior), DOWN to savor the beam crawling across the storage mesh. The freshly written strokes flash bright-white-green at the moving front and settle to the fixed stored green behind it. Only affects the dvst phosphor; the erase flash, lockout, and bistable crispness are unchanged. See research/dvst-writing-dossier.md.",
+      "range_note": "floored at 0.01 inside the shader (a ~250 s page draw); above 8 approaches instant flash-on",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor != dvst",
+          "effect": "no effect - DVST only"
+        }
+      ]
+    },
+    "erase_nonce": {
+      "define": "CRT_ERASE_NONCE",
+      "type": "int",
+      "default": 0,
+      "min": 0,
+      "max": 2048,
+      "step": 1,
+      "group": "system",
+      "knob": "hidden",
+      "label": "erase seq id",
+      "desc": "Incremented by the ERASE button (DVST page flash). The state shader detects the change and runs the 4010 erase sequence: 12ms full-screen flood-write flash, collapse to dark, ~0.75s lockout, then a clean page.",
+      "help": "Internal sequence trigger for the DVST page erase.",
+      "hard_min": -2048,
+      "hard_max": 2048,
+      "hard_why": "the shader keeps its copy of this nonce in the RGBA16F state texture; a half float represents integers exactly only up to 2048, so at 2049 the compare (stored != compiled) re-fires every frame and the sequence clock never advances - the tube stays inside its power/degauss/erase event forever"
+    },
+    "post_test": {
+      "define": "CRT_POST_TEST",
+      "type": "enum",
+      "default": "off",
+      "values": {
+        "off": 0,
+        "quick": 1,
+        "full": 2
+      },
+      "group": "artifacts",
+      "label": "SELF-TEST",
+      "knob": "selector",
+      "desc": "DEC-style power-on self-test choreography: test-data mosaic flash, then the boxed OK message; 'full' adds the field-service screens (DECALN all-E alignment grid, VT340 crosshatch-and-circle).",
+      "help": "Replays what DEC terminals actually did at power-up (EK-VT100-TM 4.2.8, VT320 UU ch.7): the RAM test writes raw test data through visible screen memory — a dense random character mosaic — then erases and shows the boxed 'OK'. quick = mosaic burst + OK box. full = the field-service extension: mosaic, OK, the DECALN screen-alignment display (a full grid of E's used to adjust width/height/linearity/focus), and the VT330/340 crosshatch-with-circle pattern. Runs during every power-on sequence; timing scales with WARMUP RATE. Glyphs are procedural suggestions, not a real character ROM — documented approximation.",
+      "bounded_by": [
+        {
+          "param": "warmup_time_scale",
+          "when": "era = tube60s or ss80s",
+          "effect": "the test starts at 8*ws+3.75 s / 6*ws s - WARMUP RATE paces it"
+        },
+        {
+          "param": "era",
+          "when": "era = modern90s",
+          "effect": "starts at a fixed 0.5 s regardless of WARMUP RATE"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "smooth_scroll": {
+      "define": "CRT_SMOOTH_SCROLL",
+      "type": "bool",
+      "default": false,
+      "group": "scan",
+      "label": "SMOOTH SCROLL",
+      "knob": "switch",
+      "desc": "DECSCLM smooth scrolling: detected whole-line scrolls glide at the documented 1 scan line per frame (6 text lines/second) instead of jumping.",
+      "help": "VT terminals with DECSCLM set (CSI ? 4 h) moved text one scan line per frame — 6 text lines/second, constant velocity, never accelerating (EK-VT100-TM 4.7.8). Real DECSCLM lived in the terminal; here the state shader DETECTS vertical content shifts by correlating the current frame against its feedback history at multiples of CELL HEIGHT, queues them like the VT100 did, and the display glides the picture through the fixed raster at the documented rate. Detection needs CELL HEIGHT set to your actual cell height in pixels; a wrong value simply disables the effect (no false glide). Fast scrolling terminals will outrun 6 lines/s exactly as real VT100s did — that lag is the authentic behavior (DEC required flow control below 4800 baud for a reason).",
+      "bounded_by": [
+        {
+          "param": "smooth_cell_px",
+          "when": "smooth_cell_px != the actual cell height in px",
+          "effect": "correlation fails: no glide, scrolling jumps normally"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "smooth_cell_px": {
+      "define": "CRT_SMOOTH_CELL_PX",
+      "type": "int",
+      "default": 30,
+      "min": 8,
+      "max": 64,
+      "step": 1,
+      "group": "scan",
+      "label": "CELL HEIGHT",
+      "unit": "px",
+      "knob": "rotary",
+      "desc": "Terminal cell height in physical pixels — the scroll quantum SMOOTH SCROLL correlates against.",
+      "help": "The scroll detector tests content shifts at exact multiples of this value. Measure: window pixel height / terminal rows (e.g. 1920px and 64 rows = 30). If unsure, nudge until scrolling glides. Wrong values are safe: correlation fails and scrolling just jumps normally.",
+      "hard_min": 0,
+      "hard_why": "a negative cell height turns the glide clamp clamp(off, -4h, 4h) into min > max, which GLSL leaves undefined (in practice the picture pins four cells off and stays there); 0 is a safe no-op",
+      "range_note": "above 64 the detector correlates at shifts too large to match real scrolls (no glide); 0 is a no-op",
+      "bounded_by": [
+        {
+          "param": "smooth_scroll",
+          "when": "smooth_scroll off",
+          "effect": "no effect"
+        }
+      ]
+    },
+    "rolling_scan": {
+      "define": "CRT_ROLLING_SCAN",
+      "type": "enum",
+      "default": "off",
+      "values": {
+        "off": 0,
+        "auto": 1,
+        "force": 2
+      },
+      "group": "scan",
+      "label": "ROLLING SCAN",
+      "knob": "selector",
+      "desc": "High-refresh temporal beam simulation: on >=120Hz displays, each panel frame excites only the band of rows the beam crossed, and the phosphor decay state does the rest — real scanning in TIME, not just space. auto = engages only when the measured refresh is >=110Hz; force = always (for testing).",
+      "help": "A real CRT does not show a full frame: at any instant only the freshly-struck rows glow at full power while the rest of the screen rides its phosphor decay. That temporal structure is what gives CRTs their motion clarity, and it needs panel refresh >= 2x the content rate (Blur Busters' insight). This implementation drives the beam-injection window through the state pass, so decay behind the sweep uses the SAME measured phosphor constants as everything else — physically stronger than post-hoc frame-splitting. At 60Hz the band mathematically covers the whole frame and the effect is an exact no-op. The shader MEASURES its own refresh rate (IIR of frame deltas in a data pixel) and 'auto' engages only above ~110Hz. HONESTY: this machine is 60Hz — the >=120Hz path compiles, self-gates, and follows the documented physics, but has not been validated on real high-refresh hardware yet. GAIN VS BLUR trades the brightness cost (duty-cycle dimming, Talbot-Plateau) against motion clarity.",
+      "bounded_by": [
+        {
+          "param": "scan_rate",
+          "when": "measured panel refresh <= 2 * scan_rate (auto needs >= 110 Hz)",
+          "effect": "the swept band covers the whole frame - an exact no-op"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "compiled out - a vector tube has no sweep"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "compiled out - storage tubes and plasma panels have no sweep"
+        }
+      ]
+    },
+    "rolling_gain": {
+      "define": "CRT_ROLLING_GAIN",
+      "type": "float",
+      "default": 0.7,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.02,
+      "group": "scan",
+      "label": "GAIN VS BLUR",
+      "knob": "rotary",
+      "desc": "Rolling scan brightness compensation: 0 = full motion clarity, honest duty-cycle dimming; 1 = boost the swept band to recover brightness (capped ~3x, softens the benefit exactly like a real bright CRT).",
+      "help": "Perceived brightness is the time-integral of emitted light (Talbot-Plateau): a beam that lights each row for a quarter of the frame costs three quarters of the brightness. Real CRTs paid this with raw phosphor drive; an SDR panel can only partially compensate. 0 keeps physics-honest dimming (best motion clarity); higher values overdrive the swept band up to a 3x cap — brighter, with emission spilling later into the cycle, exactly the tradeoff Blur Busters documents as GAIN_VS_BLUR.",
+      "hard_max": 32700.0,
+      "hard_why": "with the rolling scan engaged the swept band is boosted by up to 1 + 2*gain (the 1/duty term is capped at 3): above ~32750 that overflows the RGBA16F state texel (65504) at drive 1.0 and the band sticks at inf until an erase",
+      "range_note": "extrapolates linearly: above 1 the swept band is boosted past the 1/duty compensation (over-bright); below 0 it dims below honest duty-cycle",
+      "bounded_by": [
+        {
+          "param": "rolling_scan",
+          "when": "rolling_scan = off (or auto below 110 Hz)",
+          "effect": "no effect"
+        },
+        {
+          "param": "scan_rate",
+          "when": "panel refresh / scan_rate < 3",
+          "effect": "the maximum boost is min(refresh/scan_rate, 3): at 120 Hz against 59.94 that is 2x; the 3x cap needs >= 180 Hz"
+        }
+      ]
+    },
+    "scan_rate": {
+      "define": "CRT_SCAN_RATE",
+      "type": "float",
+      "default": 59.94,
+      "min": 45.0,
+      "max": 75.0,
+      "step": 0.01,
+      "group": "scan",
+      "label": "FIELD RATE",
+      "unit": "Hz",
+      "knob": "rotary",
+      "desc": "The vertical scan rate the simulated tube runs at: 59.94 = NTSC (two interlaced fields per 29.97fps frame), 50 = PAL, 60 = flat sixty, 72 = VESA-era ergonomic.",
+      "help": "This is the clock everything vertical beats against. NTSC's famous 59.94Hz is 60/1.001 — two fields per 29.97fps frame, the color-subcarrier compromise of 1953. It drives the rolling-scan sweep AND the interlace field clock. When the measured panel refresh is at or above this rate, INTERLACE goes fully temporal (each panel frame carries one real field); above ~2x, ROLLING SCAN can sweep within fields. Set 50 for the PAL experience (and its slower flicker), 72 for the fast-refresh VGA-era feel.",
+      "range_note": "at 0 or below the field clock stops (interlace parity freezes or flips every frame - the comb stands still or strobes); above about half the panel refresh the rolling band covers the whole frame (no-op) and interlace falls back to the spatial offset",
+      "bounded_by": [
+        {
+          "param": "interlace",
+          "when": "interlace off and rolling_scan off",
+          "effect": "no effect - nothing beats against the field clock"
+        },
+        {
+          "param": "rolling_scan",
+          "when": "interlace off and rolling_scan off",
+          "effect": "no effect - nothing beats against the field clock"
+        },
+        {
+          "param": "vector_mode",
+          "when": "vector_mode != off",
+          "effect": "no effect - the vector path has no line raster"
+        },
+        {
+          "param": "phosphor",
+          "when": "phosphor = dvst or pdp",
+          "effect": "no effect - storage tubes and plasma panels take their own display path"
+        }
+      ]
+    },
+    "pdp_dither": {
+      "define": "CRT_PDP_DITHER",
+      "type": "float",
+      "default": 0.35,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "phosphor",
+      "label": "PDP DITHER",
+      "knob": "rotary",
+      "desc": "Plasma near-black spatiotemporal dither: the crawling dot noise in dark areas from quantized subfield levels.",
+      "help": "A plasma cell is binary per subfield: near-black shades don't exist natively and are synthesized by flickering whole cells on a rotating ordered-dither pattern plus error diffusion — the signature fizzing/crawling noise in shadows, visible even on static images. Coarse, slow and greenish on 2000-era panels; fine, fast and confined to the last few percent above black on a Kuro/ZT60.",
+      "range_note": "above 1 the dither LSB grows and near-black posterizes to solid black cells; at 0 or below off",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor != pdp",
+          "effect": "no effect - plasma only"
+        },
+        {
+          "param": "mask_triads",
+          "when": "any",
+          "effect": "the dither cells are sized by PITCH (cells across the width)"
+        }
+      ]
+    },
+    "pdp_contour": {
+      "define": "CRT_PDP_CONTOUR",
+      "type": "float",
+      "default": 0.4,
+      "min": 0.0,
+      "max": 1.0,
+      "step": 0.01,
+      "group": "phosphor",
+      "label": "PDP CONTOUR",
+      "knob": "rotary",
+      "desc": "Dynamic false contouring: solarization bands on MOVING gradients (the classic plasma artifact on faces), from the eye integrating binary subfields along the motion path.",
+      "help": "Gray levels on plasma are time-division (8-12 binary-weighted subfields per frame). When the eye tracks motion across a gradient, it integrates subfields from different pixels — and at bit-boundary codes (127->128 flips every bit) the integral transiently doubles or vanishes: bright/dark hue-shifted bands crawl across moving faces and skies. Approximated here per channel via motion-gated posterization with boundary overshoot near the MSB codes; strength 8/10 on a 2000 EDTV panel, tamed to 2-3 by Pioneer CLEAR-class coding in 2008+.",
+      "hard_max": 1100000.0,
+      "hard_why": "the contour overshoot mixes drive toward band = post + (post - drive)*1.8 with weight up to contour; the swing is at most 0.058*contour, which overflows the RGBA16F state texel (65504) above ~1.12e6 and pins those cells at inf until an erase",
+      "range_note": "above 1 the false-contour overshoot exceeds the band spacing (hard bright/dark rings on motion); at 0 or below off",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor != pdp",
+          "effect": "no effect - plasma only"
+        }
+      ]
+    },
+    "pdp_black_floor": {
+      "define": "CRT_PDP_BLACK_FLOOR",
+      "type": "float",
+      "default": 0.002,
+      "min": 0.0,
+      "max": 0.01,
+      "step": 0.0002,
+      "group": "phosphor",
+      "label": "PDP FLOOR",
+      "knob": "rotary",
+      "desc": "Priming-discharge black floor: plasma blacks glow faintly (orange-neon cast) because every subfield's reset pulse emits light regardless of content.",
+      "help": "Every subfield begins with a reset/priming discharge that normalizes cell wall charge — and emits light doing it, picture or not. Early panels floored at 0.3-1.0 cd/m2 (obvious in a dark room, faintly orange from neon and green from phosphor); the 2008 Kuro drove it to 0.001 by ramp resets, which is why it was named 'black'. This knob is that floor, with the era-correct warm tint.",
+      "range_note": "linear: above 0.01 blacks keep lifting (0.05 is a grey screen); at 0 or below no floor",
+      "bounded_by": [
+        {
+          "param": "phosphor",
+          "when": "phosphor != pdp",
+          "effect": "no effect - plasma only"
+        }
+      ]
+    }
+  }
+}

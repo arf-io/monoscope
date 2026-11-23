@@ -1,0 +1,36 @@
+{
+  "name": "electrohome-g07-1981",
+  "description": "Electrohome G07 (1981): half of Pac-Man America ran on this chassis. Strong primaries, bloom on white score flashes, cap-kit-hungry, syncs to anything.",
+  "meta": {
+    "year": 1981,
+    "type": "Arcade",
+    "manufacturer": "Electrohome",
+    "price_usd": null,
+    "resolution": 240
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "slot",
+    "geom_mode": "spherical",
+    "curve_radius": 2.0,
+    "corner_radius": 0.05,
+    "scan_lines": 240,
+    "interlace": false,
+    "h_bandwidth": 280.0,
+    "era": "ss80s",
+    "hum_amp": 0.03,
+    "noise": 0.01,
+    "misconvergence": 0.8,
+    "hv_breathing": 0.5,
+    "halation": 0.072,
+    "burnin_vintage": 0.32,
+    "burnin_rate": 0.27,
+    "mask_triads": 360,
+    "glass_tint": 0.5,
+    "bezel": 0.6,
+    "warmup_time_scale": 0.2
+  },
+  "terminal": {
+    "font-size": 26
+  }
+}

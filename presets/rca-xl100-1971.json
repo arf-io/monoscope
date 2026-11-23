@@ -1,0 +1,33 @@
+{
+  "name": "rca-xl100-1971",
+  "description": "RCA XL-100 (1971, $450-800): '100% solid state' AccuColor sold on never burning out a chassis tube. Warm US factory setup, stable-for-its-day, loud degauss thunk at power-on.",
+  "meta": {
+    "year": 1971,
+    "type": "Consumer TV",
+    "manufacturer": "RCA",
+    "price_usd": 450,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "delta",
+    "geom_mode": "spherical",
+    "curve_radius": 1.9,
+    "corner_radius": 0.06,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 250.0,
+    "era": "tube60s",
+    "hum_amp": 0.03,
+    "noise": 0.03,
+    "misconvergence": 1.2,
+    "hv_breathing": 0.6,
+    "halation": 0.09,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.09,
+    "mask_triads": 360,
+    "color_temp": 6200.0,
+    "glass_tint": 0.7,
+    "bezel": 0.55
+  }
+}

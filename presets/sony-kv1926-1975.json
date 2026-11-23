@@ -1,0 +1,34 @@
+{
+  "name": "sony-kv1926-1975",
+  "description": "Sony KV-1926 Trinitron (1975, ~$600): the rich neighbor's TV. Cold clean grille sharpness, cylindrical face reflections, two faint damper wires, a ping if you knock the cabinet.",
+  "meta": {
+    "year": 1975,
+    "type": "Consumer TV",
+    "manufacturer": "Sony",
+    "price_usd": 600,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22_d93",
+    "mask_type": "grille",
+    "geom_mode": "cylindrical",
+    "curve_radius": 3.2,
+    "corner_radius": 0.045,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 260.0,
+    "era": "ss80s",
+    "hum_amp": 0.02,
+    "noise": 0.03,
+    "misconvergence": 0.6,
+    "hv_breathing": 0.4,
+    "halation": 0.072,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.06,
+    "mask_triads": 400,
+    "color_temp": 9300.0,
+    "damper_wires": "two",
+    "glass_tint": 0.7,
+    "bezel": 0.5
+  }
+}

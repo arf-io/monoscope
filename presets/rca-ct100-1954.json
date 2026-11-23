@@ -1,0 +1,41 @@
+{
+  "name": "rca-ct100-1954",
+  "description": "RCA CT-100 (1954, $1,000 = a new car's down payment): the first mass-produced color set. Dim, orange-leaning red (pre-rare-earth phosphor), constant tint drift, corner fringing everywhere. ~4,400 made; needs a dark room.",
+  "meta": {
+    "year": 1954,
+    "type": "Consumer TV",
+    "manufacturer": "RCA",
+    "price_usd": 1000,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "delta",
+    "geom_mode": "spherical",
+    "curve_radius": 1.5,
+    "corner_radius": 0.08,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 230.0,
+    "era": "tube60s",
+    "hum_amp": 0.05,
+    "noise": 0.035,
+    "misconvergence": 1.8,
+    "hv_breathing": 0.7,
+    "halation": 0.108,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.06,
+    "mask_triads": 320,
+    "brightness": -0.06,
+    "contrast": 0.8,
+    "saturation": 0.75,
+    "tint": 6.0,
+    "glass_tint": 0.8,
+    "bezel": 0.6,
+    "warmup_time_scale": 0.3,
+    "emi_wobble": 0.3
+  },
+  "terminal": {
+    "font-size": 23
+  }
+}

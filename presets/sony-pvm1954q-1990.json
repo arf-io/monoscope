@@ -1,0 +1,33 @@
+{
+  "name": "sony-pvm1954q-1990",
+  "description": "Sony PVM-1954Q (1990, ~$1,900): production-grade Trinitron, 600TVL, SMPTE-C phosphors, underscan and blue-only buttons. Resolved scanlines on 240p sources; two damper wires.",
+  "meta": {
+    "year": 1990,
+    "type": "Broadcast/pro",
+    "manufacturer": "Sony",
+    "price_usd": 1900,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "grille",
+    "geom_mode": "cylindrical",
+    "curve_radius": 3.5,
+    "corner_radius": 0.02,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 600.0,
+    "era": "modern90s",
+    "hum_amp": 0.01,
+    "noise": 0.005,
+    "misconvergence": 0.4,
+    "hv_breathing": 0.1,
+    "halation": 0.054,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.15,
+    "mask_triads": 600,
+    "damper_wires": "two",
+    "glass_tint": 0.55,
+    "bezel": 0.25
+  }
+}

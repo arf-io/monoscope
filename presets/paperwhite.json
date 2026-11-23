@@ -1,0 +1,28 @@
+{
+  "name": "paperwhite",
+  "description": "Late-80s paper-white hi-res mono: fine raster that nearly merges, flat-ish face, subtle and readable",
+  "meta": {
+    "year": null,
+    "type": "Daily drivers",
+    "manufacturer": "ghostcrtty",
+    "price_usd": null,
+    "resolution": 800
+  },
+  "params": {
+    "mask_type": "none",
+    "phosphor": "paperwhite",
+    "geom_mode": "cylindrical",
+    "curve_radius": 6.0,
+    "corner_radius": 0.015,
+    "scan_lines": 800,
+    "scan_min_width": 0.38,
+    "scan_bloom": 0.35,
+    "h_bandwidth": 1000.0,
+    "era": "modern90s",
+    "glass_tint": 0.6,
+    "halation": 0.04,
+    "diffusion": 0.06,
+    "flicker": 0.002,
+    "bezel": 0.25
+  }
+}

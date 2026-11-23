@@ -1,0 +1,35 @@
+{
+  "name": "tandy-cm11-1988",
+  "description": "Tandy CM-11 (1988, $399): what the CM-5 should have been \u2014 clean readable 15kHz text behind coated glass. Still a 200-line-class raster with honest gaps.",
+  "meta": {
+    "year": 1988,
+    "type": "PC monitors",
+    "manufacturer": "Tandy",
+    "price_usd": 399,
+    "resolution": 225
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "slot",
+    "geom_mode": "spherical",
+    "curve_radius": 2.2,
+    "corner_radius": 0.04,
+    "scan_lines": 225,
+    "interlace": false,
+    "h_bandwidth": 350.0,
+    "era": "modern90s",
+    "hum_amp": 0.01,
+    "noise": 0.005,
+    "misconvergence": 0.6,
+    "hv_breathing": 0.2,
+    "halation": 0.054,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.12,
+    "mask_triads": 480,
+    "glass_tint": 0.6,
+    "bezel": 0.4
+  },
+  "terminal": {
+    "font-size": 26
+  }
+}

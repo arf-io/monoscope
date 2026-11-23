@@ -1,0 +1,35 @@
+{
+  "name": "tandy-cm5-1987",
+  "description": "Tandy CM-5 (1987, $299): cheerful, coarse, glare-prone budget RGB \u2014 big triads make 80-column text fuzzy, but Tandy 16-color games look alive.",
+  "meta": {
+    "year": 1987,
+    "type": "PC monitors",
+    "manufacturer": "Tandy",
+    "price_usd": 299,
+    "resolution": 200
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "slot",
+    "geom_mode": "spherical",
+    "curve_radius": 2.1,
+    "corner_radius": 0.045,
+    "scan_lines": 200,
+    "interlace": false,
+    "h_bandwidth": 240.0,
+    "era": "modern90s",
+    "hum_amp": 0.02,
+    "noise": 0.005,
+    "misconvergence": 0.8,
+    "hv_breathing": 0.3,
+    "halation": 0.072,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.12,
+    "mask_triads": 330,
+    "glass_tint": 0.85,
+    "bezel": 0.4
+  },
+  "terminal": {
+    "font-size": 27
+  }
+}

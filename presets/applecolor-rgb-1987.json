@@ -1,0 +1,34 @@
+{
+  "name": "applecolor-rgb-1987",
+  "description": "AppleColor High-Resolution RGB 13-inch (1987, ~$999): the desktop-publishing Trinitron. Creamy calibrated color, gamma 1.8 warmth, one damper wire, famously uniform.",
+  "meta": {
+    "year": 1987,
+    "type": "PC monitors",
+    "manufacturer": "Apple",
+    "price_usd": 999,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "grille",
+    "geom_mode": "cylindrical",
+    "curve_radius": 3.8,
+    "corner_radius": 0.02,
+    "scan_lines": 480,
+    "interlace": false,
+    "h_bandwidth": 640.0,
+    "era": "modern90s",
+    "hum_amp": 0.01,
+    "noise": 0.0,
+    "misconvergence": 0.4,
+    "hv_breathing": 0.1,
+    "halation": 0.036,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.12,
+    "mask_triads": 700,
+    "color_temp": 6300.0,
+    "damper_wires": "one",
+    "glass_tint": 0.6,
+    "bezel": 0.25
+  }
+}

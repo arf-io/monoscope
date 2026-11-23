@@ -1,0 +1,32 @@
+{
+  "name": "nec-multisync-1986",
+  "description": "NEC MultiSync (1986, ~$799): the first monitor that followed you from CGA to EGA to VGA. Neutral dot-mask image; relay clicks on every mode change.",
+  "meta": {
+    "year": 1986,
+    "type": "PC monitors",
+    "manufacturer": "NEC",
+    "price_usd": 799,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "delta",
+    "geom_mode": "spherical",
+    "curve_radius": 2.4,
+    "corner_radius": 0.035,
+    "scan_lines": 480,
+    "interlace": false,
+    "h_bandwidth": 560.0,
+    "era": "modern90s",
+    "hum_amp": 0.01,
+    "noise": 0.005,
+    "misconvergence": 0.6,
+    "hv_breathing": 0.2,
+    "halation": 0.036,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.15,
+    "mask_triads": 580,
+    "glass_tint": 0.62,
+    "bezel": 0.3
+  }
+}

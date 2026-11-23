@@ -1,0 +1,37 @@
+{
+  "name": "sony-tv8-301w-1960",
+  "description": "Sony TV8-301W (1960, $249.95): the first direct-view all-transistor portable. Tiny contrasty B&W drowning in RF sparkle; the image shrinks as the battery sags. Gadget-buyer bait, fragile as young transistors.",
+  "meta": {
+    "year": 1960,
+    "type": "Consumer TV",
+    "manufacturer": "Sony",
+    "price_usd": 249.95,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p4",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 1.7,
+    "corner_radius": 0.08,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 200.0,
+    "era": "tube60s",
+    "hum_amp": 0.04,
+    "noise": 0.04,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.7,
+    "halation": 0.09,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.06,
+    "glass_tint": 0.7,
+    "bezel": 0.75,
+    "flicker": 0.012,
+    "h_size": 0.97,
+    "v_size": 0.97
+  },
+  "terminal": {
+    "font-size": 23
+  }
+}

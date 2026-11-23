@@ -1,0 +1,36 @@
+{
+  "name": "wells-gardner-k4600-1979",
+  "description": "Wells-Gardner K4600 (1979): the golden-age arcade raster. Hot saturated primaries through smoked cabinet glass, corners drifting out of convergence with every truck ride. Burn-in is the business model.",
+  "meta": {
+    "year": 1979,
+    "type": "Arcade",
+    "manufacturer": "Wells-Gardner",
+    "price_usd": null,
+    "resolution": 240
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "delta",
+    "geom_mode": "spherical",
+    "curve_radius": 1.9,
+    "corner_radius": 0.055,
+    "scan_lines": 240,
+    "interlace": false,
+    "h_bandwidth": 260.0,
+    "era": "ss80s",
+    "hum_amp": 0.03,
+    "noise": 0.01,
+    "misconvergence": 1.2,
+    "hv_breathing": 0.5,
+    "halation": 0.072,
+    "burnin_vintage": 0.32,
+    "burnin_rate": 0.27,
+    "mask_triads": 340,
+    "glass_tint": 0.5,
+    "bezel": 0.65,
+    "warmup_time_scale": 0.2
+  },
+  "terminal": {
+    "font-size": 26
+  }
+}

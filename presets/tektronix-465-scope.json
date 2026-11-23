@@ -1,0 +1,32 @@
+{
+  "name": "tektronix-465-scope",
+  "description": "Tektronix 465 (1972, $1,725): the bench legend's P31 trace green, rendered as a terminal. Crisp, fast, graticule-flat face. (The real 465 was an XY scope \u2014 this preset carries its phosphor and glass, not its deflection.)",
+  "meta": {
+    "year": 1972,
+    "type": "Instruments",
+    "manufacturer": "Tektronix",
+    "price_usd": 1725,
+    "resolution": 800
+  },
+  "params": {
+    "phosphor": "p31",
+    "mask_type": "none",
+    "geom_mode": "flat",
+    "curve_radius": 8.0,
+    "corner_radius": 0.02,
+    "scan_lines": 800,
+    "interlace": false,
+    "h_bandwidth": 1100.0,
+    "era": "ss80s",
+    "hum_amp": 0.01,
+    "noise": 0.005,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.2,
+    "halation": 0.054,
+    "burnin_vintage": 0.08,
+    "burnin_rate": 0.18,
+    "glass_tint": 0.55,
+    "bezel": 0.35,
+    "scan_min_width": 0.28
+  }
+}

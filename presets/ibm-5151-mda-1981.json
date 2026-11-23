@@ -1,0 +1,36 @@
+{
+  "name": "ibm-5151-mda-1981",
+  "description": "IBM 5151 (1981, $345): the business green screen. P39 long-persistence phosphor smears every scroll (that is correct behavior), etched anti-glare glass, dense crisp text.",
+  "meta": {
+    "year": 1981,
+    "type": "Terminals (mono)",
+    "manufacturer": "IBM",
+    "price_usd": 345,
+    "resolution": 350
+  },
+  "params": {
+    "phosphor": "p39",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 2.2,
+    "corner_radius": 0.04,
+    "scan_lines": 350,
+    "interlace": false,
+    "h_bandwidth": 720.0,
+    "era": "ss80s",
+    "hum_amp": 0.01,
+    "noise": 0.005,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.2,
+    "halation": 0.09,
+    "burnin_vintage": 0.24,
+    "burnin_rate": 0.24,
+    "persistence": 1.0,
+    "glass_tint": 0.42,
+    "bezel": 0.4,
+    "cursor_overdrive": 0.9
+  },
+  "terminal": {
+    "font-size": 23
+  }
+}

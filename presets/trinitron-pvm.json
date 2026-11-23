@@ -1,0 +1,37 @@
+{
+  "name": "trinitron-pvm",
+  "description": "Sony PVM/BVM broadcast monitor: aperture grille, razor 600TVL, cylindrical face, D65, underscan-clean",
+  "meta": {
+    "year": null,
+    "type": "Broadcast/pro",
+    "manufacturer": "Sony",
+    "price_usd": null,
+    "resolution": 480
+  },
+  "params": {
+    "mask_type": "grille",
+    "mask_triads": 700,
+    "mask_strength": 0.5,
+    "mask_fade": 0.4,
+    "damper_wires": "auto",
+    "geom_mode": "cylindrical",
+    "curve_radius": 4.5,
+    "corner_radius": 0.012,
+    "phosphor": "p22",
+    "scan_lines": 480,
+    "scan_min_width": 0.27,
+    "scan_bloom": 0.5,
+    "h_bandwidth": 850.0,
+    "misconvergence": 0.15,
+    "era": "modern90s",
+    "halation": 0.05,
+    "diffusion": 0.07,
+    "glass_tint": 0.55,
+    "noise": 0.0,
+    "hum_amp": 0.0,
+    "emi_wobble": 0.0,
+    "hv_breathing": 0.1,
+    "flicker": 0.004,
+    "bezel": 0.3
+  }
+}

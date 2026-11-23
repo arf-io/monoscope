@@ -1,0 +1,34 @@
+{
+  "name": "radar-p7",
+  "description": "P7 radar cascade: blue writing flash over minute-long yellow afterglow (photon-pumped slow rise), tube-era start",
+  "meta": {
+    "year": null,
+    "type": "Instruments",
+    "manufacturer": "military surplus",
+    "price_usd": null,
+    "resolution": 300
+  },
+  "params": {
+    "mask_type": "none",
+    "phosphor": "p7",
+    "persistence": 1.0,
+    "geom_mode": "spherical",
+    "curve_radius": 2.5,
+    "corner_radius": 0.06,
+    "scan_lines": 300,
+    "scan_min_width": 0.4,
+    "scan_bloom": 0.5,
+    "h_bandwidth": 450.0,
+    "era": "tube60s",
+    "glass_tint": 0.45,
+    "halation": 0.1,
+    "diffusion": 0.12,
+    "emi_wobble": 0.25,
+    "flicker": 0.008,
+    "bezel": 0.6,
+    "warmup_time_scale": 0.25
+  },
+  "terminal": {
+    "font-size": 26
+  }
+}

@@ -1,0 +1,463 @@
+#pragma clang diagnostic ignored "-Wmissing-prototypes"
+
+#include <metal_stdlib>
+#include <simd/simd.h>
+
+using namespace metal;
+
+struct GhostCrtUniforms
+{
+    float4 iResolution;
+    float iTime;
+    float iTimeDelta;
+    int iFrame;
+    float _pad0;
+    float crt_brightness;
+    float crt_contrast;
+    float crt_focus;
+    float crt_g2_screen;
+    float crt_tint;
+    float crt_saturation;
+    float crt_color_temp;
+    float crt_tube_gamma;
+    float crt_geom_mode;
+    float crt_curve_radius;
+    float crt_corner_radius;
+    float crt_bezel;
+    float crt_h_size;
+    float crt_v_size;
+    float crt_h_pos;
+    float crt_v_pos;
+    float crt_pincushion;
+    float crt_trapezoid;
+    float crt_parallelogram;
+    float crt_rotation;
+    float crt_overscan;
+    float crt_scan_lines;
+    float crt_scan_min_width;
+    float crt_scan_bloom;
+    float crt_h_bandwidth;
+    float crt_interlace;
+    float crt_misconvergence;
+    float crt_mask_type;
+    float crt_mask_triads;
+    float crt_mask_strength;
+    float crt_mask_fade;
+    float crt_damper_wires;
+    float crt_phosphor;
+    float crt_persistence;
+    float crt_trail_tint;
+    float crt_cursor_overdrive;
+    float crt_era;
+    float crt_warmup_time_scale;
+    float crt_v_hold;
+    float crt_h_hold;
+    float crt_hum_amp;
+    float crt_hum_period;
+    float crt_emi_wobble;
+    float crt_hv_breathing;
+    float crt_abl;
+    float crt_halation;
+    float crt_diffusion;
+    float crt_glass_tint;
+    float crt_noise;
+    float crt_retrace_lines;
+    float crt_flicker;
+    float crt_burnin_rate;
+    float crt_burnin_visibility;
+    float crt_burnin_vintage;
+    float crt_vector_trace;
+    float crt_vector_mode;
+    float crt_vector_beam_core;
+    float crt_vector_beam_halo;
+    float crt_vector_dot_gain;
+    float crt_vector_edge_threshold;
+    float crt_vector_flicker;
+    float crt_vector_grain;
+    float crt_radar_overlay;
+    float crt_radar_sweep;
+    float crt_radar_sweep_rate;
+    float crt_power_on;
+    float crt_power_nonce;
+    float crt_degauss_nonce;
+    float crt_debug_state;
+    float crt_dvst_auto_erase;
+    float crt_dvst_hold_dim;
+    float crt_dvst_orange_refresh;
+    float crt_dvst_write_rate;
+    float crt_erase_nonce;
+    float crt_post_test;
+    float crt_smooth_scroll;
+    float crt_smooth_cell_px;
+    float crt_rolling_scan;
+    float crt_rolling_gain;
+    float crt_scan_rate;
+    float crt_pdp_dither;
+    float crt_pdp_contour;
+    float crt_pdp_black_floor;
+};
+
+struct ghostcrtty_phosphor_state_out
+{
+    float4 FragColor [[color(0)]];
+};
+
+static inline __attribute__((always_inline))
+float4 _CRT_SAMPLE(texture2d<float> t, sampler tSmplr, thread const float2& uv)
+{
+    return t.sample(tSmplr, float2(uv.x, 1.0 - uv.y));
+}
+
+static inline __attribute__((always_inline))
+float3 fetchContent(thread const float2& uv, texture2d<float> contentTexture, sampler contentTextureSmplr)
+{
+    float2 param = uv;
+    float4 t = _CRT_SAMPLE(contentTexture, contentTextureSmplr, param);
+    return t.xyz / float3(fast::max(t.w, 0.001000000047497451305389404296875));
+}
+
+static inline __attribute__((always_inline))
+float vecLuma(thread const float2& uv, texture2d<float> contentTexture, sampler contentTextureSmplr)
+{
+    float2 param = uv;
+    return dot(fetchContent(param, contentTexture, contentTextureSmplr), float3(0.2989999949932098388671875, 0.58700001239776611328125, 0.114000000059604644775390625));
+}
+
+static inline __attribute__((always_inline))
+float measureVectorDensity(constant GhostCrtUniforms& gcu, texture2d<float> contentTexture, sampler contentTextureSmplr)
+{
+    float d = 0.0;
+    for (int y = 0; y < 4; y++)
+    {
+        for (int x = 0; x < 4; x++)
+        {
+            float2 uv = (float2(float(x), float(y)) + float2(0.5)) / float2(4.0);
+            float2 param = uv;
+            d += step(gcu.crt_vector_edge_threshold, vecLuma(param, contentTexture, contentTextureSmplr));
+        }
+    }
+    return d / 16.0;
+}
+
+static inline __attribute__((always_inline))
+float3 adjustChroma(thread const float3& c)
+{
+    return c;
+}
+
+static inline __attribute__((always_inline))
+float3 signalToDrive(thread const float3& linearContent, constant GhostCrtUniforms& gcu)
+{
+    float3 signal = powr(fast::max(linearContent, float3(0.0)), float3(0.4545454680919647216796875));
+    signal = (signal * gcu.crt_contrast) + float3(gcu.crt_brightness);
+    signal = fast::clamp(signal, float3(0.0), float3(1.39999997615814208984375));
+    return powr(signal, float3(gcu.crt_tube_gamma));
+}
+
+static inline __attribute__((always_inline))
+float vecBeamMask(thread const float2& uv, thread const float2& res, constant GhostCrtUniforms& gcu, texture2d<float> contentTexture, sampler contentTextureSmplr)
+{
+    float2 px = float2(1.0) / res;
+    float2 param = uv + (px * float2(-1.0));
+    float l00 = vecLuma(param, contentTexture, contentTextureSmplr);
+    float2 param_1 = uv + (px * float2(0.0, -1.0));
+    float l10 = vecLuma(param_1, contentTexture, contentTextureSmplr);
+    float2 param_2 = uv + (px * float2(1.0, -1.0));
+    float l20 = vecLuma(param_2, contentTexture, contentTextureSmplr);
+    float2 param_3 = uv + (px * float2(-1.0, 0.0));
+    float l01 = vecLuma(param_3, contentTexture, contentTextureSmplr);
+    float2 param_4 = uv + (px * float2(1.0, 0.0));
+    float l21 = vecLuma(param_4, contentTexture, contentTextureSmplr);
+    float2 param_5 = uv + (px * float2(-1.0, 1.0));
+    float l02 = vecLuma(param_5, contentTexture, contentTextureSmplr);
+    float2 param_6 = uv + (px * float2(0.0, 1.0));
+    float l12 = vecLuma(param_6, contentTexture, contentTextureSmplr);
+    float2 param_7 = uv + (px * float2(1.0));
+    float l22 = vecLuma(param_7, contentTexture, contentTextureSmplr);
+    float gx = ((l20 + (2.0 * l21)) + l22) - ((l00 + (2.0 * l01)) + l02);
+    float gy = ((l02 + (2.0 * l12)) + l22) - ((l00 + (2.0 * l10)) + l20);
+    float mag = sqrt((gx * gx) + (gy * gy));
+    return smoothstep(gcu.crt_vector_edge_threshold, (gcu.crt_vector_edge_threshold * 2.0) + 0.02999999932944774627685546875, mag);
+}
+
+static inline __attribute__((always_inline))
+float vecDwell(thread const float2& uv, thread const float2& res, thread const float& centerMask, constant GhostCrtUniforms& gcu, texture2d<float> contentTexture, sampler contentTextureSmplr)
+{
+    if (centerMask < 0.25)
+    {
+        return 0.0;
+    }
+    float2 px = float2(1.0) / res;
+    float lit = 0.0;
+    for (int i = 0; i < 8; i++)
+    {
+        float a = float(i) * 0.785398185253143310546875;
+        float2 s = uv + ((float2(cos(a), sin(a)) * 1.7999999523162841796875) * px);
+        float2 param = s;
+        lit += step(gcu.crt_vector_edge_threshold, vecLuma(param, contentTexture, contentTextureSmplr));
+    }
+    return centerMask * smoothstep(3.5, 1.0, lit);
+}
+
+static inline __attribute__((always_inline))
+float hash12(thread const float2& p)
+{
+    float3 p3 = fract(p.xyx * 0.103100001811981201171875);
+    p3 += float3(dot(p3, p3.yzx + float3(33.3300018310546875)));
+    return fract((p3.x + p3.y) * p3.z);
+}
+
+static inline __attribute__((always_inline))
+float decayPiecewise(thread const float& s, thread const float& dt, thread float& tauHi, thread const float& knee, thread float& tauLo, constant GhostCrtUniforms& gcu)
+{
+    if (s <= 0.0)
+    {
+        return 0.0;
+    }
+    float persist = gcu.crt_persistence;
+    if (persist <= 0.0)
+    {
+        return 0.0;
+    }
+    tauHi *= persist;
+    tauLo *= persist;
+    if (s > knee)
+    {
+        float tKnee = tauHi * log(s / knee);
+        if (dt <= tKnee)
+        {
+            return s * exp((-dt) / tauHi);
+        }
+        return knee * exp((-(dt - tKnee)) / tauLo);
+    }
+    return s * exp((-dt) / tauLo);
+}
+
+static inline __attribute__((always_inline))
+float3 decayPiecewise3(thread const float3& s, thread const float& dt, constant GhostCrtUniforms& gcu)
+{
+    float param = s.x;
+    float param_1 = dt;
+    float param_2 = 0.012400000356137752532958984375;
+    float param_3 = 0.070000000298023223876953125;
+    float param_4 = 0.07999999821186065673828125;
+    float _196 = decayPiecewise(param, param_1, param_2, param_3, param_4, gcu);
+    float param_5 = s.y;
+    float param_6 = dt;
+    float param_7 = 0.0;
+    float param_8 = 0.0;
+    float param_9 = 0.0;
+    float _205 = decayPiecewise(param_5, param_6, param_7, param_8, param_9, gcu);
+    float param_10 = s.z;
+    float param_11 = dt;
+    float param_12 = 0.0;
+    float param_13 = 0.0;
+    float param_14 = 0.0;
+    float _214 = decayPiecewise(param_10, param_11, param_12, param_13, param_14, gcu);
+    return float3(_196, _205, _214);
+}
+
+static inline __attribute__((always_inline))
+void mainImage(thread float4& fragColor, thread const float2& fragCoord, constant GhostCrtUniforms& gcu, texture2d<float> contentTexture, sampler contentTextureSmplr, texture2d<float> historyTexture, sampler historyTextureSmplr)
+{
+    float2 res = gcu.iResolution.xy;
+    float2 uv = fragCoord / res;
+    float dt = fast::clamp(gcu.iTimeDelta, 0.0, 0.100000001490116119384765625);
+    float2 param = float2(0.5) / res;
+    float4 histP0 = _CRT_SAMPLE(historyTexture, historyTextureSmplr, param);
+    float2 param_1 = float2(1.5, 0.5) / res;
+    float4 histP1 = _CRT_SAMPLE(historyTexture, historyTextureSmplr, param_1);
+    bool initialized = histP1.w > 0.5;
+    float seqClock = histP0.x + dt;
+    float storedPowerNonce = histP0.y;
+    float storedDegaussNonce = histP0.z;
+    float powerState = histP0.w;
+    float warmClock = histP1.x;
+    float aplIIR = histP1.y;
+    float degaussClock = histP1.z + dt;
+    bool powerOn = int(gcu.crt_power_on) != 0;
+    if (!initialized)
+    {
+        seqClock = 0.0;
+        warmClock = 0.0;
+        degaussClock = 1000.0;
+        storedPowerNonce = float(int(gcu.crt_power_nonce));
+        storedDegaussNonce = float(int(gcu.crt_degauss_nonce));
+        powerState = float(powerOn);
+    }
+    else
+    {
+        if (storedPowerNonce != float(int(gcu.crt_power_nonce)))
+        {
+            seqClock = 0.0;
+            storedPowerNonce = float(int(gcu.crt_power_nonce));
+            powerState = float(powerOn);
+        }
+        if (storedDegaussNonce != float(int(gcu.crt_degauss_nonce)))
+        {
+            degaussClock = 0.0;
+            storedDegaussNonce = float(int(gcu.crt_degauss_nonce));
+        }
+    }
+    float _610;
+    if (powerOn)
+    {
+        _610 = fast::min(warmClock + dt, 3600.0);
+    }
+    else
+    {
+        _610 = fast::max(warmClock - (3.0 * dt), 0.0);
+    }
+    warmClock = _610;
+    float aplNow = measureVectorDensity(gcu, contentTexture, contentTextureSmplr);
+    float _629;
+    if (initialized)
+    {
+        _629 = mix(aplNow, aplIIR, exp((-dt) / 0.119999997317790985107421875));
+    }
+    else
+    {
+        _629 = aplNow;
+    }
+    aplIIR = _629;
+    float rollPhase = 0.0;
+    float rollPrev = 0.0;
+    float estHz = 60.0;
+    float fieldParity = 0.0;
+    if (fragCoord.y < 1.0)
+    {
+        float x = floor(fragCoord.x);
+        if (x < 1.0)
+        {
+            fragColor = float4(seqClock, storedPowerNonce, storedDegaussNonce, powerState);
+        }
+        else
+        {
+            if (x < 2.0)
+            {
+                fragColor = float4(warmClock, aplIIR, degaussClock, 1.0);
+            }
+            else
+            {
+                if ((x < 3.0) && (x >= 2.0))
+                {
+                    fragColor = float4(float(int(gcu.crt_erase_nonce)), 0.0, 0.0, 0.0);
+                }
+                else
+                {
+                    fragColor = float4(0.0);
+                }
+            }
+        }
+        return;
+    }
+    float2 param_2 = uv;
+    float3 content = fetchContent(param_2, contentTexture, contentTextureSmplr);
+    float3 param_3 = content;
+    content = adjustChroma(param_3);
+    float3 param_4 = content;
+    float3 drive = signalToDrive(param_4, gcu);
+    float ablComp = 1.0 / (1.0 + ((gcu.crt_abl * fast::max(aplIIR - 0.3499999940395355224609375, 0.0)) * 2.2000000476837158203125));
+    drive *= ablComp;
+    float beamOn = float(powerOn);
+    drive *= beamOn;
+    float2 param_5 = uv;
+    float2 param_6 = res;
+    float vMask = vecBeamMask(param_5, param_6, gcu, contentTexture, contentTextureSmplr);
+    float2 param_7 = uv;
+    float2 param_8 = res;
+    float param_9 = vMask;
+    float vDwell = vecDwell(param_7, param_8, param_9, gcu, contentTexture, contentTextureSmplr);
+    drive *= vMask;
+    if ((gcu.crt_vector_grain > 0.0) && (vMask > 0.00999999977648258209228515625))
+    {
+        float2 param_10 = fragCoord + float2(fract(gcu.iTime * 41.0) * 613.0, 7.0);
+        float g = hash12(param_10);
+        drive *= (1.0 + (gcu.crt_vector_grain * (g - 0.5)));
+    }
+    float mdrive = dot(drive, float3(0.2989999949932098388671875, 0.58700001239776611328125, 0.114000000059604644775390625));
+    drive = float3(mdrive, 0.0, 0.0);
+    if ((gcu.crt_cursor_overdrive > 0.0) && false)
+    {
+        float age = gcu.iTime - gcu.iTime;
+        if ((age >= 0.0) && (age < 0.25))
+        {
+            float2 cpos = float2(-1000000.0);
+            float2 csz = float2(0.0);
+            bool _810 = fragCoord.x >= cpos.x;
+            bool _821;
+            if (_810)
+            {
+                _821 = fragCoord.x <= (cpos.x + csz.x);
+            }
+            else
+            {
+                _821 = _810;
+            }
+            bool inX = _821;
+            bool _827 = fragCoord.y <= cpos.y;
+            bool _838;
+            if (_827)
+            {
+                _838 = fragCoord.y >= (cpos.y - csz.y);
+            }
+            else
+            {
+                _838 = _827;
+            }
+            bool inY = _838;
+            if (inX && inY)
+            {
+                drive *= (1.0 + (gcu.crt_cursor_overdrive * exp((-age) / 0.039999999105930328369140625)));
+            }
+        }
+    }
+    float2 param_11 = uv;
+    float4 hist = _CRT_SAMPLE(historyTexture, historyTextureSmplr, param_11);
+    float3 param_12 = hist.xyz;
+    float param_13 = dt;
+    float3 excited = decayPiecewise3(param_12, param_13, gcu);
+    float2 param_14 = float2(2.5, 0.5) / res;
+    float4 histP2n = _CRT_SAMPLE(historyTexture, historyTextureSmplr, param_14);
+    bool _883;
+    if (initialized)
+    {
+        _883 = histP2n.x != float(int(gcu.crt_erase_nonce));
+    }
+    else
+    {
+        _883 = initialized;
+    }
+    if (_883)
+    {
+        excited = float3(0.0);
+    }
+    float vR = fast::max(drive.x, excited.x);
+    float gDecay = 0.20000000298023223876953125 * fast::max(gcu.crt_persistence, 0.001000000047497451305389404296875);
+    float vG = fast::max(vDwell, hist.y * exp((-dt) / fast::max(gDecay, 9.9999997473787516355514526367188e-05)));
+    float3 newState = float3(vR, vG, 0.0);
+    float dose = hist.w;
+    float emitLum = newState.x;
+    float inc = ((emitLum * dt) * 9.6999996458180248737335205078125e-05) * gcu.crt_burnin_rate;
+    if (inc > 0.0)
+    {
+        float p = inc / 0.0005000000237487256526947021484375;
+        float2 param_15 = fragCoord + float2(fract(gcu.iTime) * 917.0, 0.0);
+        float r = hash12(param_15);
+        dose += (0.0005000000237487256526947021484375 * step(r, p));
+        dose = fast::min(dose, 1.0);
+    }
+    fragColor = float4(newState, dose);
+}
+
+fragment ghostcrtty_phosphor_state_out ghostcrtty_phosphor_state(constant GhostCrtUniforms& gcu [[buffer(0)]], texture2d<float> contentTexture [[texture(0)]], texture2d<float> historyTexture [[texture(1)]], sampler contentTextureSmplr [[sampler(0)]], sampler historyTextureSmplr [[sampler(1)]], float4 gl_FragCoord [[position]])
+{
+    ghostcrtty_phosphor_state_out out = {};
+    float2 _crtFragCoord = float2(gl_FragCoord.x, gcu.iResolution.y - gl_FragCoord.y);
+    float2 param_1 = _crtFragCoord;
+    float4 param;
+    mainImage(param, param_1, gcu, contentTexture, contentTextureSmplr, historyTexture, historyTextureSmplr);
+    out.FragColor = param;
+    return out;
+}
+

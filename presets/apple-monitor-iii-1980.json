@@ -1,0 +1,36 @@
+{
+  "name": "apple-monitor-iii-1980",
+  "description": "Apple Monitor III (1980, ~$250): soft comfortable green under an anti-glare mesh \u2014 and legendary ghost trails when anything moves (very slow phosphor). Burn-in prone.",
+  "meta": {
+    "year": 1980,
+    "type": "Terminals (mono)",
+    "manufacturer": "Apple",
+    "price_usd": 250,
+    "resolution": 240
+  },
+  "params": {
+    "phosphor": "p39",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 2.0,
+    "corner_radius": 0.045,
+    "scan_lines": 240,
+    "interlace": false,
+    "h_bandwidth": 560.0,
+    "era": "ss80s",
+    "hum_amp": 0.02,
+    "noise": 0.01,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.3,
+    "halation": 0.072,
+    "burnin_vintage": 0.24,
+    "burnin_rate": 0.24,
+    "persistence": 1.2,
+    "glass_tint": 0.5,
+    "bezel": 0.45,
+    "cursor_overdrive": 0.8
+  },
+  "terminal": {
+    "font-size": 26
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "name": "consumer-slot-tv",
+  "description": "1980s living-room color TV: slot mask, spherical glass, D93 cold white, composite mush, interlace, overscan",
+  "meta": {
+    "year": 1980,
+    "type": "Consumer TV",
+    "manufacturer": "generic",
+    "price_usd": null,
+    "resolution": 480
+  },
+  "params": {
+    "mask_type": "slot",
+    "mask_triads": 380,
+    "mask_strength": 0.55,
+    "mask_fade": 0.35,
+    "geom_mode": "spherical",
+    "curve_radius": 3.2,
+    "corner_radius": 0.045,
+    "phosphor": "p22_d93",
+    "color_temp": 9300.0,
+    "scan_lines": 480,
+    "interlace": true,
+    "scan_min_width": 0.42,
+    "scan_bloom": 0.7,
+    "h_bandwidth": 320.0,
+    "misconvergence": 0.9,
+    "era": "ss80s",
+    "overscan": 0.04,
+    "hum_amp": 0.02,
+    "hum_period": 8.0,
+    "emi_wobble": 0.15,
+    "hv_breathing": 0.5,
+    "halation": 0.08,
+    "diffusion": 0.1,
+    "glass_tint": 0.7,
+    "noise": 0.02,
+    "flicker": 0.012,
+    "bezel": 0.5
+  },
+  "terminal": {
+    "font-size": 22
+  }
+}

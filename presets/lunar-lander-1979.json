@@ -1,0 +1,43 @@
+{
+  "name": "lunar-lander-1979",
+  "description": "Lunar Lander (1979, Atari): the same Electrohome G05 mono vector hardware as Asteroids (19VARP4, P4 white, 12 kV), but running its display list at a punishing 41 Hz \u2014 visibly, deeply flickery. Thrust-plume intensity play against a sparse wireframe terrain; the low refresh means the whole screen beats. Outline extraction with the refresh-vs-load droop cranked up.",
+  "meta": {
+    "year": 1979,
+    "type": "Arcade",
+    "manufacturer": "Atari",
+    "price_usd": null,
+    "resolution": 1024
+  },
+  "params": {
+    "vector_mode": "outline",
+    "phosphor": "p4",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 2.6,
+    "pincushion": 0.03,
+    "corner_radius": 0.04,
+    "scan_lines": 1024,
+    "interlace": false,
+    "vector_trace": 1.0,
+    "vector_beam_core": 0.72,
+    "vector_beam_halo": 3.2,
+    "vector_dot_gain": 1.6,
+    "vector_edge_threshold": 0.12,
+    "vector_flicker": 0.4,
+    "vector_grain": 0.05,
+    "focus": 0.98,
+    "scan_min_width": 0.26,
+    "persistence": 1.05,
+    "h_bandwidth": 1050.0,
+    "era": "tube60s",
+    "warmup_time_scale": 0.2,
+    "glass_tint": 0.42,
+    "halation": 0.1,
+    "diffusion": 0.05,
+    "bezel": 0.4,
+    "noise": 0.006,
+    "misconvergence": 0.0,
+    "burnin_rate": 0.3,
+    "burnin_vintage": 0.18
+  }
+}

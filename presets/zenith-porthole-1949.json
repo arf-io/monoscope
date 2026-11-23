@@ -1,0 +1,38 @@
+{
+  "name": "zenith-porthole-1949",
+  "description": "Zenith 'Porthole' console (1949, ~$445 = a workman's month): 12-inch round B&W behind circular glass. Deep fishbowl, halation halos, warm P4, hum bar, vertical-hold drift. TV as furniture.",
+  "meta": {
+    "year": 1949,
+    "type": "Consumer TV",
+    "manufacturer": "Zenith",
+    "price_usd": 445,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p4",
+    "mask_type": "none",
+    "geom_mode": "spherical",
+    "curve_radius": 1.6,
+    "corner_radius": 0.09,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 250.0,
+    "era": "tube60s",
+    "hum_amp": 0.06,
+    "noise": 0.035,
+    "misconvergence": 0.0,
+    "hv_breathing": 0.6,
+    "halation": 0.144,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.09,
+    "glass_tint": 0.75,
+    "bezel": 0.7,
+    "flicker": 0.015,
+    "emi_wobble": 0.3,
+    "v_hold": 0.25,
+    "warmup_time_scale": 0.25
+  },
+  "terminal": {
+    "font-size": 23
+  }
+}

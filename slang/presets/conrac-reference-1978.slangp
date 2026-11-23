@@ -1,0 +1,13 @@
+shaders = 2
+
+shader0 = "../generated/conrac-reference-1978/phosphor-state.slang"
+alias0 = "PhosphorState"
+filter_linear0 = true
+scale_type0 = viewport
+scale0 = 1.0
+float_framebuffer0 = true
+
+shader1 = "../generated/conrac-reference-1978/crt-display.slang"
+filter_linear1 = true
+scale_type1 = viewport
+scale1 = 1.0

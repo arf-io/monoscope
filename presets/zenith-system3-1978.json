@@ -1,0 +1,32 @@
+{
+  "name": "zenith-system3-1978",
+  "description": "Zenith System 3 (1978, ~$650 console): tri-focus gun sharpness behind heavy tinted console glass \u2014 deep blacks, dimmer whites, 'the quality goes in before the name goes on'.",
+  "meta": {
+    "year": 1978,
+    "type": "Consumer TV",
+    "manufacturer": "Zenith",
+    "price_usd": 650,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "slot",
+    "geom_mode": "spherical",
+    "curve_radius": 2.2,
+    "corner_radius": 0.045,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 260.0,
+    "era": "ss80s",
+    "hum_amp": 0.02,
+    "noise": 0.03,
+    "misconvergence": 0.8,
+    "hv_breathing": 0.4,
+    "halation": 0.054,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.09,
+    "mask_triads": 400,
+    "glass_tint": 0.55,
+    "bezel": 0.6
+  }
+}

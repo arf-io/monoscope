@@ -1,0 +1,34 @@
+{
+  "name": "sanyo-21t50-1978",
+  "description": "Sanyo 13-inch (1978, ~$350): the bedroom second set (Sears rebadged thousands). Serviceable, oversaturated, mild purity blotches, pincushion visible on the credits.",
+  "meta": {
+    "year": 1978,
+    "type": "Consumer TV",
+    "manufacturer": "Sanyo",
+    "price_usd": 350,
+    "resolution": 480
+  },
+  "params": {
+    "phosphor": "p22",
+    "mask_type": "slot",
+    "geom_mode": "spherical",
+    "curve_radius": 2.0,
+    "corner_radius": 0.05,
+    "scan_lines": 480,
+    "interlace": true,
+    "h_bandwidth": 240.0,
+    "era": "ss80s",
+    "hum_amp": 0.04,
+    "noise": 0.035,
+    "misconvergence": 1.0,
+    "hv_breathing": 0.6,
+    "halation": 0.09,
+    "burnin_vintage": 0.0,
+    "burnin_rate": 0.09,
+    "mask_triads": 360,
+    "saturation": 1.2,
+    "glass_tint": 0.72,
+    "bezel": 0.5,
+    "pincushion": 0.012
+  }
+}
